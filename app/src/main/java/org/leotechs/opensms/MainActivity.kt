@@ -56,7 +56,8 @@ class MainActivity : ComponentActivity() {
                     SmsContent(
                         isDefault = isDefaultSmsApp,
                         onSendSms = { number, message, encrypt ->
-                            sendSms(number, message, encrypt)
+                            val sent = sendSms(number, message, encrypt)
+                            sent
                         },
                         onRequestDefault = {
                             requestDefaultSmsRole()
@@ -86,8 +87,8 @@ class MainActivity : ComponentActivity() {
         checkDefaultSmsStatus()
     }
 
-    private fun sendSms(phoneNumber: String, message: String, encrypt: Boolean) {
-        try {
+    private fun sendSms(phoneNumber: String, message: String, encrypt: Boolean): Boolean {
+        return try {
             val smsManager = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                 this.getSystemService(SmsManager::class.java)
             } else {
@@ -102,8 +103,10 @@ class MainActivity : ComponentActivity() {
 
             smsManager.sendTextMessage(phoneNumber, null, finalMessage, null, null)
             Toast.makeText(this, "Message sent!", Toast.LENGTH_SHORT).show()
+            true
         } catch (e: Exception) {
             Toast.makeText(this, "Failed to send message: ${e.message}", Toast.LENGTH_LONG).show()
+            false
         }
     }
 
@@ -158,7 +161,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun SmsContent(
     isDefault: Boolean,
-    onSendSms: (String, String, Boolean) -> Unit,
+    onSendSms: (String, String, Boolean) -> Boolean,
     onRequestDefault: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -191,7 +194,11 @@ fun SmsContent(
         )
         Spacer(modifier = Modifier.height(16.dp))
         Button(
-            onClick = { onSendSms(phoneNumber, message, false) },
+            onClick = { 
+                if (onSendSms(phoneNumber, message, false)) {
+                    message = ""
+                }
+            },
             enabled = phoneNumber.isNotBlank() && message.isNotBlank(),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -199,7 +206,11 @@ fun SmsContent(
         }
         Spacer(modifier = Modifier.height(8.dp))
         Button(
-            onClick = { onSendSms(phoneNumber, message, true) },
+            onClick = { 
+                if (onSendSms(phoneNumber, message, true)) {
+                    message = ""
+                }
+            },
             enabled = phoneNumber.isNotBlank() && message.isNotBlank(),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -212,6 +223,6 @@ fun SmsContent(
 @Composable
 fun SmsContentPreview() {
     OpenSMSTheme {
-        SmsContent(isDefault = true, onSendSms = { _, _, _ -> }, onRequestDefault = {})
+        SmsContent(isDefault = true, onSendSms = { _, _, _ -> true }, onRequestDefault = {})
     }
 }

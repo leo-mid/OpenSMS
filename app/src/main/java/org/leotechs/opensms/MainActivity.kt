@@ -25,6 +25,15 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import org.leotechs.opensms.ui.theme.OpenSMSTheme
 
+import android.telephony.SmsManager
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.Button
+import androidx.compose.material3.TextField
+import androidx.compose.runtime.remember
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.fillMaxWidth
+
 class MainActivity : ComponentActivity() {
     private val REQUEST_DEFAULT_APP = 101
     private val MY_PERMISSIONS_REQUEST_SMS = 102
@@ -47,13 +56,36 @@ class MainActivity : ComponentActivity() {
         setContent {
             OpenSMSTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
+                    SmsContent(
                         isDefault = isDefaultSmsApp,
+                        onSendSms = { number, message, encrypt ->
+                            sendSms(number, message, encrypt)
+                        },
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
             }
+        }
+    }
+
+    private fun sendSms(phoneNumber: String, message: String, encrypt: Boolean) {
+        try {
+            val smsManager = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                this.getSystemService(SmsManager::class.java)
+            } else {
+                SmsManager.getDefault()
+            }
+
+            val finalMessage = if (encrypt) {
+                "[ENC]${CryptoUtils.encrypt(message)}"
+            } else {
+                message
+            }
+
+            smsManager.sendTextMessage(phoneNumber, null, finalMessage, null, null)
+            Toast.makeText(this, "Message sent!", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Failed to send message: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -106,20 +138,56 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun Greeting(name: String, isDefault: Boolean, modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
-        Text(text = "Hello $name!")
+fun SmsContent(
+    isDefault: Boolean,
+    onSendSms: (String, String, Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var phoneNumber by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf("") }
+
+    Column(modifier = modifier.padding(16.dp)) {
         Text(
-            text = if (isDefault) "Default SMS App: YES" else "Default SMS App: NO",
+            text = if (isDefault) "OpenSMS is Default" else "OpenSMS is NOT Default",
             color = if (isDefault) androidx.compose.ui.graphics.Color.Green else androidx.compose.ui.graphics.Color.Red
         )
+        Spacer(modifier = Modifier.height(16.dp))
+        TextField(
+            value = phoneNumber,
+            onValueChange = { phoneNumber = it },
+            label = { Text("Phone Number") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        TextField(
+            value = message,
+            onValueChange = { message = it },
+            label = { Text("Message") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = { onSendSms(phoneNumber, message, false) },
+            enabled = phoneNumber.isNotBlank() && message.isNotBlank(),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Send Normal SMS")
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(
+            onClick = { onSendSms(phoneNumber, message, true) },
+            enabled = phoneNumber.isNotBlank() && message.isNotBlank(),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Send Encrypted SMS")
+        }
     }
 }
 
 @Preview(showBackground = true)
 @Composable
-fun GreetingPreview() {
+fun SmsContentPreview() {
     OpenSMSTheme {
-        Greeting("Android", isDefault = true)
+        SmsContent(isDefault = true, onSendSms = { _, _, _ -> })
     }
 }

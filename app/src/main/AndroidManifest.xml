@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_MMS" />
     <uses-permission android:name="android.permission.RECEIVE_WAP_PUSH" />
+
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+
 
     <application
         android:allowBackup="true"
@@ -25,15 +26,9 @@
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
-
-        <activity android:name=".MainActivity">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
                 <action android:name="android.intent.action.SEND" />
                 <action android:name="android.intent.action.SENDTO" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -45,15 +40,18 @@
             </intent-filter>
         </activity>
 
-        <receiver android:name=".SmsReceiver"
+        <receiver
+            android:name=".SmsReceiver"
+            android:exported="true"
             android:permission="android.permission.BROADCAST_SMS">
             <intent-filter>
-                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
                 <action android:name="android.provider.Telephony.SMS_DELIVER" />
             </intent-filter>
         </receiver>
 
-        <receiver android:name=".MmsReceiver"
+        <receiver
+            android:name=".MmsReceiver"
+            android:exported="true"
             android:permission="android.permission.BROADCAST_WAP_PUSH">
             <intent-filter>
                 <action android:name="android.provider.Telephony.WAP_PUSH_DELIVER" />

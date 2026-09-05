@@ -1,5 +1,7 @@
 package org.leotechs.opensms
 
+import android.net.Uri
+
 data class Conversation(
     val threadId: Long,
     val address: String,
@@ -16,5 +18,8 @@ data class Message(
     val body: String,
     val date: Long,
     val type: Int, // 1 for inbox, 2 for sent
-    val isEncrypted: Boolean
+    val isEncrypted: Boolean,
+    val isMms: Boolean = false,
+    val mediaUri: Uri? = null,
+    val mediaContentType: String? = null
 )

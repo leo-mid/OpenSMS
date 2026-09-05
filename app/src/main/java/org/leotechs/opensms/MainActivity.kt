@@ -13,6 +13,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,6 +22,11 @@ import androidx.compose.ui.Modifier
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import org.leotechs.opensms.ui.theme.OpenSMSTheme
+
+import android.content.ContentValues
+import android.net.Uri
+import android.provider.Telephony
+import android.util.Log
 
 class MainActivity : ComponentActivity() {
     private val REQUEST_DEFAULT_APP = 101
@@ -43,27 +49,34 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             OpenSMSTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    if (currentThreadId == null) {
-                        ConversationList(
-                            isDefault = isDefaultSmsApp,
-                            onConversationClick = { threadId, name ->
-                                currentThreadId = threadId
-                                currentContactName = name
-                            },
-                            onRequestDefault = { requestDefaultSmsRole() },
-                            modifier = Modifier.padding(innerPadding)
-                        )
-                    } else {
-                        MessageDetail(
-                            threadId = currentThreadId!!,
-                            contactName = currentContactName,
-                            onBack = { currentThreadId = null },
-                            onSendSms = { number: String, message: String, encrypt: Boolean ->
-                                sendSms(number, message, encrypt)
-                            },
-                            modifier = Modifier.padding(innerPadding)
-                        )
+                Scaffold(
+                    modifier = Modifier.fillMaxSize()
+                ) { innerPadding ->
+                    Box(modifier = Modifier.padding(innerPadding)) {
+                        if (currentThreadId == null) {
+                            ConversationList(
+                                isDefault = isDefaultSmsApp,
+                                onConversationClick = { threadId, name ->
+                                    currentThreadId = threadId
+                                    currentContactName = name
+                                },
+                                onRequestDefault = { requestDefaultSmsRole() },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            MessageDetail(
+                                threadId = currentThreadId!!,
+                                contactName = currentContactName,
+                                onBack = { currentThreadId = null },
+                                onSendSms = { number: String, message: String, encrypt: Boolean ->
+                                    sendSms(number, message, encrypt)
+                                },
+                                onSendMms = { number: String, uri: Uri ->
+                                    sendMms(number, uri)
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
                     }
                 }
             }
@@ -103,11 +116,29 @@ class MainActivity : ComponentActivity() {
             }
 
             smsManager.sendTextMessage(phoneNumber, null, finalMessage, null, null)
+            SmsRepository(this).saveSentSms(phoneNumber, finalMessage)
             Toast.makeText(this, "Message sent!", Toast.LENGTH_SHORT).show()
             true
         } catch (e: Exception) {
             Toast.makeText(this, "Failed to send message: ${e.message}", Toast.LENGTH_LONG).show()
             false
+        }
+    }
+
+    private fun sendMms(phoneNumber: String, uri: Uri): Boolean {
+        try {
+            // 1. Send via network
+            MmsUtils.sendMms(this, phoneNumber, uri)
+            
+            // 2. Save to database
+            SmsRepository(this).saveSentMms(phoneNumber, uri)
+            
+            Toast.makeText(this, "MMS Sending...", Toast.LENGTH_SHORT).show()
+            return true
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to send MMS", e)
+            Toast.makeText(this, "Failed to send MMS: ${e.message}", Toast.LENGTH_LONG).show()
+            return false
         }
     }
 
@@ -118,7 +149,8 @@ class MainActivity : ComponentActivity() {
             Manifest.permission.SEND_SMS,
             Manifest.permission.RECEIVE_MMS,
             Manifest.permission.RECEIVE_WAP_PUSH,
-            Manifest.permission.READ_CONTACTS
+            Manifest.permission.READ_CONTACTS,
+            Manifest.permission.CAMERA
         )
         
         val toRequest = permissions.filter {

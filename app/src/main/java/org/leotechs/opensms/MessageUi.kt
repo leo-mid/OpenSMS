@@ -1,6 +1,11 @@
 package org.leotechs.opensms
 
+import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -11,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,12 +24,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import org.leotechs.opensms.ui.theme.OpenSMSTheme
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -142,7 +151,6 @@ private fun formatConversationDate(timestamp: Long): String {
         return "Yesterday"
     }
 
-    // Check if it's within the last 6 days (excluding today and yesterday)
     val sixDaysAgo = Calendar.getInstance().apply { 
         set(Calendar.HOUR_OF_DAY, 0)
         set(Calendar.MINUTE, 0)
@@ -164,6 +172,7 @@ fun MessageDetail(
     contactName: String?,
     onBack: () -> Unit,
     onSendSms: (String, String, Boolean) -> Boolean,
+    onSendMms: (String, Uri) -> Boolean,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -171,6 +180,34 @@ fun MessageDetail(
     val messages = remember { mutableStateListOf<Message>() }
     var phoneNumber by remember { mutableStateOf("") }
     var messageText by remember { mutableStateOf("") }
+
+    // Media Handling
+    var tempImageUri by remember { mutableStateOf<Uri?>(null) }
+    
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && tempImageUri != null) {
+            onSendMms(phoneNumber, tempImageUri!!)
+        }
+    }
+
+    val pickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            onSendMms(phoneNumber, uri)
+        }
+    }
+
+    fun createTempUri(): Uri {
+        val tempFile = File.createTempFile("captured_image", ".jpg", context.externalCacheDir)
+        return FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            tempFile
+        )
+    }
 
     BackHandler(onBack = onBack)
 
@@ -183,10 +220,15 @@ fun MessageDetail(
         }
     }
 
-    BoxWithConstraints(modifier = modifier.imePadding()) {
+    BoxWithConstraints(modifier = modifier) {
+        val density = LocalDensity.current
         val maxHeight = maxHeight / 2
 
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -205,8 +247,17 @@ fun MessageDetail(
 
             val listState = rememberLazyListState()
             
+            // Auto-scroll when messages arrive
             LaunchedEffect(messages.size) {
                 if (messages.isNotEmpty()) {
+                    listState.animateScrollToItem(messages.size - 1)
+                }
+            }
+
+            // Auto-scroll when keyboard height changes
+            val imeBottom = WindowInsets.ime.getBottom(density)
+            LaunchedEffect(imeBottom) {
+                if (imeBottom > 0 && messages.isNotEmpty()) {
                     listState.animateScrollToItem(messages.size - 1)
                 }
             }
@@ -230,6 +281,34 @@ fun MessageDetail(
                 verticalAlignment = Alignment.Bottom,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                var menuExpanded by remember { mutableStateOf(false) }
+
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(Icons.Default.Add, contentDescription = "Add attachment")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Camera") },
+                            onClick = { 
+                                menuExpanded = false
+                                tempImageUri = createTempUri()
+                                cameraLauncher.launch(tempImageUri!!)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Photos") },
+                            onClick = { 
+                                menuExpanded = false
+                                pickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                            }
+                        )
+                    }
+                }
+
                 TextField(
                     value = messageText,
                     onValueChange = { messageText = it },
@@ -237,7 +316,7 @@ fun MessageDetail(
                         .weight(1f)
                         .heightIn(max = maxHeight),
                     placeholder = { Text("Message") },
-                    maxLines = 100 // High enough to trigger scrolling via heightIn
+                    maxLines = 100
                 )
                 Column(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -245,7 +324,6 @@ fun MessageDetail(
                     Button(onClick = {
                         if (onSendSms(phoneNumber, messageText, false)) {
                             messageText = ""
-                            // Refresh messages
                             val msgs = repository.getMessages(threadId)
                             messages.clear()
                             messages.addAll(msgs)
@@ -261,7 +339,7 @@ fun MessageDetail(
 
 @Composable
 fun MessageItem(message: Message) {
-    val isSent = message.type == 2 // 2 is Telephony.Sms.MESSAGE_TYPE_SENT
+    val isSent = message.type == 2
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start
@@ -273,10 +351,26 @@ fun MessageItem(message: Message) {
                 .background(if (isSent) Color(0xFF007AFF) else Color(0xFFE9E9EB))
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            Text(
-                text = message.body,
-                color = if (isSent) Color.White else Color.Black
-            )
+            Column {
+                if (message.isMms && message.mediaUri != null) {
+                    AsyncImage(
+                        model = message.mediaUri,
+                        contentDescription = "MMS Content",
+                        modifier = Modifier
+                            .sizeIn(maxWidth = 200.dp, maxHeight = 300.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                    )
+                    if (message.body.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                }
+                if (message.body.isNotEmpty()) {
+                    Text(
+                        text = message.body,
+                        color = if (isSent) Color.White else Color.Black
+                    )
+                }
+            }
         }
     }
 }

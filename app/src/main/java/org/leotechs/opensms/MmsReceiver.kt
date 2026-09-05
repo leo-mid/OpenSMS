@@ -21,13 +21,18 @@ class MmsReceiver : BroadcastReceiver() {
             try {
                 val pdu = PduParser(data).parse()
                 if (pdu is NotificationInd) {
-                    val from = pdu.from?.string ?: "Unknown"
+                    val from = pdu.from?.getString() ?: "Unknown"
                     val contentLocation = pdu.contentLocation?.let { String(it) } ?: ""
                     
                     Log.d("MmsReceiver", "MMS notification from $from, loc: $contentLocation")
                     
                     val threadId = Telephony.Threads.getOrCreateThreadId(context, from)
-                    saveMmsNotification(context, pdu, threadId)
+                    val uri = saveMmsNotification(context, pdu, threadId)
+                    
+                    if (uri != null) {
+                        val mmsId = uri.lastPathSegment ?: ""
+                        MmsUtils.downloadMms(context, contentLocation, mmsId)
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("MmsReceiver", "Error processing MMS notification", e)
@@ -35,7 +40,7 @@ class MmsReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun saveMmsNotification(context: Context, pdu: NotificationInd, threadId: Long) {
+    private fun saveMmsNotification(context: Context, pdu: NotificationInd, threadId: Long): Uri? {
         val values = ContentValues().apply {
             put(Telephony.Mms.THREAD_ID, threadId)
             put(Telephony.Mms.MESSAGE_BOX, Telephony.Mms.MESSAGE_BOX_INBOX)
@@ -52,7 +57,7 @@ class MmsReceiver : BroadcastReceiver() {
             val uri = context.contentResolver.insert(Telephony.Mms.Inbox.CONTENT_URI, values)
             if (uri != null) {
                 val mmsId = uri.lastPathSegment
-                val from = pdu.from?.string ?: "Unknown"
+                val from = pdu.from?.getString() ?: "Unknown"
                 
                 val addrValues = ContentValues().apply {
                     put("address", from)
@@ -62,8 +67,10 @@ class MmsReceiver : BroadcastReceiver() {
                 context.contentResolver.insert(Uri.parse("content://mms/$mmsId/addr"), addrValues)
                 Log.d("MmsReceiver", "Successfully saved MMS notification: $uri")
             }
+            return uri
         } catch (e: Exception) {
             Log.e("MmsReceiver", "Error saving MMS notification", e)
         }
+        return null
     }
 }

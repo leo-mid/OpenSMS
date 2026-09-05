@@ -6,6 +6,7 @@ import android.net.Uri
 import android.provider.ContactsContract
 import android.provider.Telephony
 import android.util.Log
+import com.google.android.mms.pdu_alt.*
 
 class SmsRepository(private val context: Context) {
 
@@ -133,75 +134,77 @@ class SmsRepository(private val context: Context) {
     fun getMessages(threadId: Long): List<Message> {
         val messages = mutableListOf<Message>()
         
-        // 1. Get SMS
+        // Use unified view for ordering but fetch details manually if needed
         try {
+            val uri = Uri.parse("content://mms-sms/conversations/$threadId")
             val cursor = context.contentResolver.query(
-                Telephony.Sms.CONTENT_URI,
+                uri,
                 null,
-                "thread_id = ?",
-                arrayOf(threadId.toString()),
-                null
+                null,
+                null,
+                "date ASC"
             )
+
             cursor?.use {
                 val idIdx = it.getColumnIndex("_id")
                 val bodyIdx = it.getColumnIndex("body")
                 val dateIdx = it.getColumnIndex("date")
                 val addressIdx = it.getColumnIndex("address")
                 val typeIdx = it.getColumnIndex("type")
+                val ctIndex = it.getColumnIndex("ct_t")
+                val msgBoxIdx = it.getColumnIndex("msg_box")
+
                 while (it.moveToNext()) {
                     val id = if (idIdx != -1) it.getLong(idIdx) else 0
-                    val body = if (bodyIdx != -1) it.getString(bodyIdx) ?: "" else ""
-                    val isEncrypted = body.startsWith("[ENC]")
-                    messages.add(
-                        Message(
-                            id = id,
-                            address = if (addressIdx != -1) it.getString(addressIdx) ?: "" else "",
-                            body = if (isEncrypted) "[Decrypted] " + CryptoUtils.decrypt(body.substring(5)) else body,
-                            date = if (dateIdx != -1) it.getLong(dateIdx) else 0,
-                            type = if (typeIdx != -1) it.getInt(typeIdx) else 1,
-                            isEncrypted = isEncrypted,
-                            isMms = false
+                    val date = if (dateIdx != -1) it.getLong(dateIdx) else 0
+                    val address = if (addressIdx != -1) it.getString(addressIdx) ?: "" else ""
+                    
+                    val contentType = if (ctIndex != -1) it.getString(ctIndex) else null
+                    val isMms = contentType != null && contentType.contains("multipart")
+
+                    if (isMms) {
+                        val msgBox = if (msgBoxIdx != -1) it.getInt(msgBoxIdx) else 1
+                        val mmsMedia = getMmsMedia(id)
+                        
+                        messages.add(
+                            Message(
+                                id = id,
+                                address = if (address.isEmpty()) getMmsAddress(id) ?: "" else address,
+                                body = mmsMedia?.first ?: "",
+                                date = if (date < 1000000000000L) date * 1000 else date, // Handle sec vs ms
+                                type = if (msgBox == 2) 2 else 1,
+                                isEncrypted = false,
+                                isMms = true,
+                                mediaUri = mmsMedia?.second,
+                                mediaContentType = mmsMedia?.third
+                            )
                         )
-                    )
+                    } else {
+                        val body = if (bodyIdx != -1) it.getString(bodyIdx) ?: "" else ""
+                        val isEncrypted = body.startsWith("[ENC]")
+                        val displayBody = if (isEncrypted) {
+                            "[Decrypted] " + CryptoUtils.decrypt(body.substring(5))
+                        } else {
+                            body
+                        }
+
+                        messages.add(
+                            Message(
+                                id = id,
+                                address = address,
+                                body = displayBody,
+                                date = date,
+                                type = if (typeIdx != -1) it.getInt(typeIdx) else 1,
+                                isEncrypted = isEncrypted,
+                                isMms = false
+                            )
+                        )
+                    }
                 }
             }
-        } catch (e: Exception) { Log.e("SmsRepository", "SMS query error", e) }
-
-        // 2. Get MMS
-        try {
-            val cursor = context.contentResolver.query(
-                Telephony.Mms.CONTENT_URI,
-                null,
-                "thread_id = ?",
-                arrayOf(threadId.toString()),
-                null
-            )
-            cursor?.use {
-                val idIdx = it.getColumnIndex("_id")
-                val dateIdx = it.getColumnIndex("date")
-                val msgBoxIdx = it.getColumnIndex("msg_box")
-                while (it.moveToNext()) {
-                    val mmsId = if (idIdx != -1) it.getLong(idIdx) else 0
-                    val mmsMedia = getMmsMedia(mmsId)
-                    val dateVal = if (dateIdx != -1) it.getLong(dateIdx) else 0
-                    val msgBox = if (msgBoxIdx != -1) it.getInt(msgBoxIdx) else 1
-                    messages.add(
-                        Message(
-                            id = mmsId,
-                            address = getMmsAddress(mmsId) ?: "",
-                            body = mmsMedia?.first ?: "",
-                            date = dateVal * 1000, // MMS date is in seconds
-                            type = if (msgBox == 2) 2 else 1,
-                            isEncrypted = false,
-                            isMms = true,
-                            mediaUri = mmsMedia?.second,
-                            mediaContentType = mmsMedia?.third
-                        )
-                    )
-                }
-            }
-        } catch (e: Exception) { Log.e("SmsRepository", "MMS query error", e) }
-
+        } catch (e: Exception) {
+            Log.e("SmsRepository", "Error querying unified messages", e)
+        }
         return messages.sortedBy { it.date }
     }
 
@@ -227,12 +230,15 @@ class SmsRepository(private val context: Context) {
 
             while (it.moveToNext()) {
                 val ct = if (ctIndex != -1) it.getString(ctIndex) else null
+                Log.d("SmsRepository", "MMS Part for ID $mmsId - CT: $ct")
+                
                 if (ct == "text/plain") {
                     body = if (textIndex != -1) it.getString(textIndex) else null
                 } else if (ct != null && (ct.startsWith("image/") || ct.startsWith("video/"))) {
                     val partId = if (idIndex != -1) it.getLong(idIndex) else 0
                     mediaUri = Uri.parse("content://mms/part/$partId")
                     contentType = ct
+                    Log.d("SmsRepository", "Found Media part: $mediaUri ($ct)")
                 }
             }
         }
@@ -342,6 +348,43 @@ class SmsRepository(private val context: Context) {
             Log.d("SmsRepository", "Successfully saved sent MMS to system database: $mmsUri")
         } catch (e: Exception) {
             Log.e("SmsRepository", "Error saving sent MMS", e)
+        }
+    }
+
+    fun saveReceivedMms(mmsId: String, pdu: RetrieveConf) {
+        try {
+            val persister = PduPersister.getPduPersister(context)
+            
+            // Try to get sub_id from the notification message to maintain consistency
+            val subId = try {
+                context.contentResolver.query(
+                    Uri.parse("content://mms/$mmsId"),
+                    arrayOf("sub_id"),
+                    null, null, null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val subIdIndex = cursor.getColumnIndex("sub_id")
+                        if (subIdIndex != -1) cursor.getInt(subIdIndex) else 0
+                    } else 0
+                } ?: 0
+            } catch (e: Exception) {
+                0 // Default to 0 if sub_id column is not found or query fails
+            }
+
+            // Using persist() will handle creating the MMS message and all its parts correctly,
+            // avoiding the "Column _data not found" issue with manual openOutputStream.
+            // subscriptionId is required for multi-SIM support.
+            val uri = persister.persist(pdu, Telephony.Mms.Inbox.CONTENT_URI, true, true, null, subId)
+            
+            if (uri != null) {
+                // Delete the old placeholder notification message
+                context.contentResolver.delete(Uri.parse("content://mms/$mmsId"), null, null)
+                Log.d("SmsRepository", "Successfully persisted received MMS to $uri and removed notification $mmsId")
+            } else {
+                Log.e("SmsRepository", "Failed to persist MMS using PduPersister")
+            }
+        } catch (e: Exception) {
+            Log.e("SmsRepository", "Error saving received MMS", e)
         }
     }
 }

@@ -1,6 +1,7 @@
 package org.leotechs.opensms
 
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -16,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import kotlinx.coroutines.launch
@@ -23,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -30,8 +33,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
-import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.decode.VideoFrameDecoder
@@ -48,7 +49,6 @@ fun ConversationList(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val repository = remember { SmsRepository(context) }
     val conversations = remember { mutableStateListOf<Conversation>() }
 
@@ -195,7 +195,6 @@ fun MessageDetail(
     ) { success ->
         if (success && tempImageUri != null) {
             if (onSendMms(phoneNumber, tempImageUri!!)) {
-                // Refresh messages
                 scope.launch {
                     val msgs = repository.getMessages(threadId)
                     messages.clear()
@@ -210,7 +209,6 @@ fun MessageDetail(
     ) { uri ->
         if (uri != null) {
             if (onSendMms(phoneNumber, uri)) {
-                // Refresh messages
                 scope.launch {
                     val msgs = repository.getMessages(threadId)
                     messages.clear()
@@ -414,7 +412,10 @@ fun MessageItem(message: Message) {
                                 .fillMaxWidth(0.7f)
                                 .heightIn(max = 250.dp)
                                 .clip(RoundedCornerShape(12.dp)),
-                            contentScale = ContentScale.Crop
+                            contentScale = ContentScale.Crop,
+                            onError = {
+                                Log.e("MessageUi", "Coil failed to load ${message.mediaUri}: ${it.result.throwable}")
+                            }
                         )
                         if (isVideo) {
                             Icon(

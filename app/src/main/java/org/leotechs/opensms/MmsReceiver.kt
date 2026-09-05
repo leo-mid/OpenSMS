@@ -26,7 +26,8 @@ class MmsReceiver : BroadcastReceiver() {
                     
                     Log.d("MmsReceiver", "MMS notification from $from, loc: $contentLocation")
                     
-                    saveMmsNotification(context, pdu)
+                    val threadId = Telephony.Threads.getOrCreateThreadId(context, from)
+                    saveMmsNotification(context, pdu, threadId)
                 }
             } catch (e: Exception) {
                 Log.e("MmsReceiver", "Error processing MMS notification", e)
@@ -34,8 +35,9 @@ class MmsReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun saveMmsNotification(context: Context, pdu: NotificationInd) {
+    private fun saveMmsNotification(context: Context, pdu: NotificationInd, threadId: Long) {
         val values = ContentValues().apply {
+            put(Telephony.Mms.THREAD_ID, threadId)
             put(Telephony.Mms.MESSAGE_BOX, Telephony.Mms.MESSAGE_BOX_INBOX)
             put(Telephony.Mms.DATE, System.currentTimeMillis() / 1000)
             put(Telephony.Mms.READ, 0)

@@ -1,7 +1,6 @@
 package org.leotechs.opensms
 
 import android.net.Uri
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -19,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,7 +30,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.decode.VideoFrameDecoder
 import org.leotechs.opensms.ui.theme.OpenSMSTheme
 import java.io.File
 import java.text.SimpleDateFormat
@@ -44,6 +48,7 @@ fun ConversationList(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val repository = remember { SmsRepository(context) }
     val conversations = remember { mutableStateListOf<Conversation>() }
 
@@ -176,6 +181,7 @@ fun MessageDetail(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val repository = remember { SmsRepository(context) }
     val messages = remember { mutableStateListOf<Message>() }
     var phoneNumber by remember { mutableStateOf("") }
@@ -188,7 +194,14 @@ fun MessageDetail(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success && tempImageUri != null) {
-            onSendMms(phoneNumber, tempImageUri!!)
+            if (onSendMms(phoneNumber, tempImageUri!!)) {
+                // Refresh messages
+                scope.launch {
+                    val msgs = repository.getMessages(threadId)
+                    messages.clear()
+                    messages.addAll(msgs)
+                }
+            }
         }
     }
 
@@ -196,7 +209,14 @@ fun MessageDetail(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
-            onSendMms(phoneNumber, uri)
+            if (onSendMms(phoneNumber, uri)) {
+                // Refresh messages
+                scope.launch {
+                    val msgs = repository.getMessages(threadId)
+                    messages.clear()
+                    messages.addAll(msgs)
+                }
+            }
         }
     }
 
@@ -340,6 +360,27 @@ fun MessageDetail(
 @Composable
 fun MessageItem(message: Message) {
     val isSent = message.type == 2
+    var showFullScreen by remember { mutableStateOf(false) }
+
+    if (showFullScreen && message.mediaUri != null) {
+        AlertDialog(
+            onDismissRequest = { showFullScreen = false },
+            confirmButton = {
+                TextButton(onClick = { showFullScreen = false }) {
+                    Text("Close")
+                }
+            },
+            text = {
+                AsyncImage(
+                    model = message.mediaUri,
+                    contentDescription = "Full Screen Media",
+                    modifier = Modifier.fillMaxWidth(),
+                    contentScale = ContentScale.Fit
+                )
+            }
+        )
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start
@@ -353,13 +394,37 @@ fun MessageItem(message: Message) {
         ) {
             Column {
                 if (message.isMms && message.mediaUri != null) {
-                    AsyncImage(
-                        model = message.mediaUri,
-                        contentDescription = "MMS Content",
+                    val context = LocalContext.current
+                    val isVideo = message.mediaContentType?.startsWith("video/") == true
+                    
+                    Box(
+                        contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .sizeIn(maxWidth = 200.dp, maxHeight = 300.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                    )
+                            .padding(vertical = 4.dp)
+                            .clickable { showFullScreen = true }
+                    ) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(message.mediaUri)
+                                .decoderFactory(VideoFrameDecoder.Factory())
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = "MMS Content",
+                            modifier = Modifier
+                                .fillMaxWidth(0.7f)
+                                .heightIn(max = 250.dp)
+                                .clip(RoundedCornerShape(12.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                        if (isVideo) {
+                            Icon(
+                                imageVector = Icons.Default.PlayCircle,
+                                contentDescription = "Video",
+                                tint = Color.White.copy(alpha = 0.8f),
+                                modifier = Modifier.size(48.dp)
+                            )
+                        }
+                    }
                     if (message.body.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(4.dp))
                     }

@@ -6,9 +6,6 @@ import android.net.Uri
 import android.provider.ContactsContract
 import android.provider.Telephony
 import android.util.Log
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class SmsRepository(private val context: Context) {
 
@@ -78,6 +75,26 @@ class SmsRepository(private val context: Context) {
 
     private fun getAddressForThread(threadId: Long): String? {
         try {
+            // Try MMS first
+            val mmsCursor = context.contentResolver.query(
+                Uri.parse("content://mms/"),
+                arrayOf("_id"),
+                "thread_id = ?",
+                arrayOf(threadId.toString()),
+                "date DESC LIMIT 1"
+            )
+            mmsCursor?.use {
+                if (it.moveToFirst()) {
+                    val idx = it.getColumnIndex("_id")
+                    if (idx != -1) {
+                        val mmsId = it.getLong(idx)
+                        val addr = getMmsAddress(mmsId)
+                        if (addr != null) return addr
+                    }
+                }
+            }
+
+            // Fallback to SMS
             val cursor = context.contentResolver.query(
                 Telephony.Sms.CONTENT_URI,
                 arrayOf("address"),
@@ -96,77 +113,96 @@ class SmsRepository(private val context: Context) {
         return null
     }
 
-    fun getMessages(threadId: Long): List<Message> {
-        val messages = mutableListOf<Message>()
-        try {
-            val uri = Uri.parse("content://mms-sms/conversations/$threadId")
-            val cursor = context.contentResolver.query(
-                uri,
-                null,
-                null,
-                null,
-                "date ASC"
-            )
-
-            cursor?.use {
-                val idIndex = it.getColumnIndex("_id")
-                val bodyIndex = it.getColumnIndex("body")
-                val dateIndex = it.getColumnIndex("date")
-                val addressIndex = it.getColumnIndex("address")
-                val typeIndex = it.getColumnIndex("type")
-                val ctIndex = it.getColumnIndex("ct")
-                val msgBoxIndex = it.getColumnIndex("msg_box")
-
+    private fun getMmsAddress(mmsId: Long): String? {
+        val uri = Uri.parse("content://mms/$mmsId/addr")
+        val cursor = context.contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            val addrIdx = it.getColumnIndex("address")
+            if (addrIdx != -1) {
                 while (it.moveToNext()) {
-                    val id = if (idIndex != -1) it.getLong(idIndex) else 0
-                    val date = if (dateIndex != -1) it.getLong(dateIndex) else 0
-                    val address = if (addressIndex != -1) it.getString(addressIndex) ?: "" else ""
-                    
-                    val contentType = if (ctIndex != -1) it.getString(ctIndex) else null
-                    val isMms = contentType != null && contentType != "application/vnd.wap.sic"
-
-                    if (isMms) {
-                        val msgBox = if (msgBoxIndex != -1) it.getInt(msgBoxIndex) else 1
-                        val mmsMedia = getMmsMedia(id)
-                        messages.add(
-                            Message(
-                                id = id,
-                                address = address,
-                                body = mmsMedia?.first ?: "",
-                                date = date,
-                                type = if (msgBox == 2) 2 else 1,
-                                isEncrypted = false,
-                                isMms = true,
-                                mediaUri = mmsMedia?.second,
-                                mediaContentType = mmsMedia?.third
-                            )
-                        )
-                    } else {
-                        val body = if (bodyIndex != -1) it.getString(bodyIndex) ?: "" else ""
-                        val isEncrypted = body.startsWith("[ENC]")
-                        val displayBody = if (isEncrypted) {
-                            "[Decrypted] " + CryptoUtils.decrypt(body.substring(5))
-                        } else {
-                            body
-                        }
-
-                        messages.add(
-                            Message(
-                                id = id,
-                                address = address,
-                                body = displayBody,
-                                date = date,
-                                type = if (typeIndex != -1) it.getInt(typeIndex) else 1,
-                                isEncrypted = isEncrypted
-                            )
-                        )
+                    val address = it.getString(addrIdx)
+                    if (address != null && address != "insert-address-token") {
+                        return address
                     }
                 }
             }
-        } catch (e: Exception) {
-            Log.e("SmsRepository", "Error querying messages for thread $threadId", e)
         }
-        return messages
+        return null
+    }
+
+    fun getMessages(threadId: Long): List<Message> {
+        val messages = mutableListOf<Message>()
+        
+        // 1. Get SMS
+        try {
+            val cursor = context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                null,
+                "thread_id = ?",
+                arrayOf(threadId.toString()),
+                null
+            )
+            cursor?.use {
+                val idIdx = it.getColumnIndex("_id")
+                val bodyIdx = it.getColumnIndex("body")
+                val dateIdx = it.getColumnIndex("date")
+                val addressIdx = it.getColumnIndex("address")
+                val typeIdx = it.getColumnIndex("type")
+                while (it.moveToNext()) {
+                    val id = if (idIdx != -1) it.getLong(idIdx) else 0
+                    val body = if (bodyIdx != -1) it.getString(bodyIdx) ?: "" else ""
+                    val isEncrypted = body.startsWith("[ENC]")
+                    messages.add(
+                        Message(
+                            id = id,
+                            address = if (addressIdx != -1) it.getString(addressIdx) ?: "" else "",
+                            body = if (isEncrypted) "[Decrypted] " + CryptoUtils.decrypt(body.substring(5)) else body,
+                            date = if (dateIdx != -1) it.getLong(dateIdx) else 0,
+                            type = if (typeIdx != -1) it.getInt(typeIdx) else 1,
+                            isEncrypted = isEncrypted,
+                            isMms = false
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) { Log.e("SmsRepository", "SMS query error", e) }
+
+        // 2. Get MMS
+        try {
+            val cursor = context.contentResolver.query(
+                Telephony.Mms.CONTENT_URI,
+                null,
+                "thread_id = ?",
+                arrayOf(threadId.toString()),
+                null
+            )
+            cursor?.use {
+                val idIdx = it.getColumnIndex("_id")
+                val dateIdx = it.getColumnIndex("date")
+                val msgBoxIdx = it.getColumnIndex("msg_box")
+                while (it.moveToNext()) {
+                    val mmsId = if (idIdx != -1) it.getLong(idIdx) else 0
+                    val mmsMedia = getMmsMedia(mmsId)
+                    val dateVal = if (dateIdx != -1) it.getLong(dateIdx) else 0
+                    val msgBox = if (msgBoxIdx != -1) it.getInt(msgBoxIdx) else 1
+                    messages.add(
+                        Message(
+                            id = mmsId,
+                            address = getMmsAddress(mmsId) ?: "",
+                            body = mmsMedia?.first ?: "",
+                            date = dateVal * 1000, // MMS date is in seconds
+                            type = if (msgBox == 2) 2 else 1,
+                            isEncrypted = false,
+                            isMms = true,
+                            mediaUri = mmsMedia?.second,
+                            mediaContentType = mmsMedia?.third
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) { Log.e("SmsRepository", "MMS query error", e) }
+
+        return messages.sortedBy { it.date }
     }
 
     private fun getMmsMedia(mmsId: Long): Triple<String?, Uri?, String?>? {
@@ -190,11 +226,11 @@ class SmsRepository(private val context: Context) {
             val textIndex = it.getColumnIndex("text")
 
             while (it.moveToNext()) {
-                val ct = it.getString(ctIndex)
+                val ct = if (ctIndex != -1) it.getString(ctIndex) else null
                 if (ct == "text/plain") {
-                    body = it.getString(textIndex)
+                    body = if (textIndex != -1) it.getString(textIndex) else null
                 } else if (ct != null && (ct.startsWith("image/") || ct.startsWith("video/"))) {
-                    val partId = it.getLong(idIndex)
+                    val partId = if (idIndex != -1) it.getLong(idIndex) else 0
                     mediaUri = Uri.parse("content://mms/part/$partId")
                     contentType = ct
                 }
@@ -264,8 +300,11 @@ class SmsRepository(private val context: Context) {
 
     fun saveSentMms(address: String, mediaUri: Uri) {
         try {
+            val threadId = Telephony.Threads.getOrCreateThreadId(context, address)
+
             // 1. Insert MMS header
             val values = ContentValues().apply {
+                put(Telephony.Mms.THREAD_ID, threadId)
                 put(Telephony.Mms.MESSAGE_BOX, Telephony.Mms.MESSAGE_BOX_SENT)
                 put(Telephony.Mms.DATE, System.currentTimeMillis() / 1000)
                 put(Telephony.Mms.READ, 1)

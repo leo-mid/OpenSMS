@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -50,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -352,77 +355,88 @@ fun MessageDetail(
         }
     }
 
-    Column(modifier = modifier) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp)
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-            }
-            Text(
-                text = contactName ?: phoneNumber,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 8.dp)
-            )
-        }
+    BoxWithConstraints(modifier = modifier.imePadding()) {
+        val maxHeight = maxHeight / 2
 
-        val listState = rememberLazyListState()
-        
-        LaunchedEffect(messages.size) {
-            if (messages.isNotEmpty()) {
-                listState.animateScrollToItem(messages.size - 1)
-            }
-        }
-
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 16.dp)
-        ) {
-            items(messages) { message ->
-                MessageItem(message)
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            TextField(
-                value = messageText,
-                onValueChange = { messageText = it },
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Message") }
-            )
-            Button(onClick = {
-                if (onSendSms(phoneNumber, messageText, false)) {
-                    messageText = ""
-                    // Refresh messages
-                    val msgs = repository.getMessages(threadId)
-                    messages.clear()
-                    messages.addAll(msgs)
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                 }
-            }) {
-                Text("Send")
+                Text(
+                    text = contactName ?: phoneNumber,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
             }
-            Button(onClick = {
-                if (onSendSms(phoneNumber, messageText, true)) {
-                    messageText = ""
-                    // Refresh messages
-                    val msgs = repository.getMessages(threadId)
-                    messages.clear()
-                    messages.addAll(msgs)
+
+            val listState = rememberLazyListState()
+            
+            LaunchedEffect(messages.size) {
+                if (messages.isNotEmpty()) {
+                    listState.animateScrollToItem(messages.size - 1)
                 }
-            }) {
-                Text("Enc")
+            }
+
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 16.dp)
+            ) {
+                items(messages) { message ->
+                    MessageItem(message)
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TextField(
+                    value = messageText,
+                    onValueChange = { messageText = it },
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(max = maxHeight),
+                    placeholder = { Text("Message") },
+                    maxLines = 100 // High enough to trigger scrolling via heightIn
+                )
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Button(onClick = {
+                        if (onSendSms(phoneNumber, messageText, false)) {
+                            messageText = ""
+                            // Refresh messages
+                            val msgs = repository.getMessages(threadId)
+                            messages.clear()
+                            messages.addAll(msgs)
+                        }
+                    }) {
+                        Text("Send")
+                    }
+//                    Button(onClick = {
+//                        if (onSendSms(phoneNumber, messageText, true)) {
+//                            messageText = ""
+//                            // Refresh messages
+//                            val msgs = repository.getMessages(threadId)
+//                            messages.clear()
+//                            messages.addAll(msgs)
+//                        }
+//                    }) {
+//                        Text("Enc")
+//                    }
+                }
             }
         }
     }

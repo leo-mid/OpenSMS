@@ -2,37 +2,36 @@ package org.leotechs.opensms
 
 import android.Manifest
 import android.app.Activity
+import android.app.role.RoleManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.provider.Telephony
+import android.telephony.SmsManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import org.leotechs.opensms.ui.theme.OpenSMSTheme
-
-import android.telephony.SmsManager
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.material3.Button
-import androidx.compose.material3.TextField
-import androidx.compose.runtime.remember
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.fillMaxWidth
 
 class MainActivity : ComponentActivity() {
     private val REQUEST_DEFAULT_APP = 101
@@ -42,12 +41,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        isDefaultSmsApp = Telephony.Sms.getDefaultSmsPackage(this) == packageName
+        checkDefaultSmsStatus()
 
         if (!isDefaultSmsApp) {
-            val setSmsAppIntent = Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT)
-            setSmsAppIntent.putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, packageName)
-            startActivityForResult(setSmsAppIntent, REQUEST_DEFAULT_APP)
+            requestDefaultSmsRole()
         } else {
             checkSmsPermissions()
         }
@@ -61,11 +58,32 @@ class MainActivity : ComponentActivity() {
                         onSendSms = { number, message, encrypt ->
                             sendSms(number, message, encrypt)
                         },
+                        onRequestDefault = {
+                            requestDefaultSmsRole()
+                        },
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
             }
         }
+    }
+
+    private fun checkDefaultSmsStatus() {
+        val roleManager = getSystemService(RoleManager::class.java)
+        isDefaultSmsApp = roleManager.isRoleHeld(RoleManager.ROLE_SMS)
+    }
+
+    private fun requestDefaultSmsRole() {
+        val roleManager = getSystemService(RoleManager::class.java)
+        if (roleManager.isRoleAvailable(RoleManager.ROLE_SMS)) {
+            val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_SMS)
+            startActivityForResult(intent, REQUEST_DEFAULT_APP)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        checkDefaultSmsStatus()
     }
 
     private fun sendSms(phoneNumber: String, message: String, encrypt: Boolean) {
@@ -141,6 +159,7 @@ class MainActivity : ComponentActivity() {
 fun SmsContent(
     isDefault: Boolean,
     onSendSms: (String, String, Boolean) -> Unit,
+    onRequestDefault: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var phoneNumber by remember { mutableStateOf("") }
@@ -151,6 +170,11 @@ fun SmsContent(
             text = if (isDefault) "OpenSMS is Default" else "OpenSMS is NOT Default",
             color = if (isDefault) androidx.compose.ui.graphics.Color.Green else androidx.compose.ui.graphics.Color.Red
         )
+        if (!isDefault) {
+            Button(onClick = onRequestDefault, modifier = Modifier.fillMaxWidth()) {
+                Text("Set as Default SMS App")
+            }
+        }
         Spacer(modifier = Modifier.height(16.dp))
         TextField(
             value = phoneNumber,
@@ -188,6 +212,6 @@ fun SmsContent(
 @Composable
 fun SmsContentPreview() {
     OpenSMSTheme {
-        SmsContent(isDefault = true, onSendSms = { _, _, _ -> })
+        SmsContent(isDefault = true, onSendSms = { _, _, _ -> }, onRequestDefault = {})
     }
 }

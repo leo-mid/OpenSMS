@@ -21,6 +21,8 @@ class SmsReceiver : BroadcastReceiver() {
                 
                 if (AppState.currentThreadId != threadId) {
                     NotificationHelper.showNotification(context, threadId, sender, body)
+                } else {
+                    repository.markAsRead(threadId)
                 }
                 
                 Log.d("SmsReceiver", "Saved SMS from $sender")

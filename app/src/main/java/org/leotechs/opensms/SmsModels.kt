@@ -9,7 +9,8 @@ data class Conversation(
     val date: Long,
     val contactName: String?,
     val contactPhotoUri: String?,
-    val isEncrypted: Boolean
+    val isEncrypted: Boolean,
+    val isRead: Boolean = true
 )
 
 data class Message(

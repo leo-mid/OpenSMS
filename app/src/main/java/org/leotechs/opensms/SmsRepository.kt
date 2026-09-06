@@ -28,6 +28,7 @@ class SmsRepository(private val context: Context) {
                 val threadIdIndex = it.getColumnIndex("_id")
                 val snippetIndex = it.getColumnIndex("snippet")
                 val dateIndex = it.getColumnIndex("date")
+                val readIndex = it.getColumnIndex("read")
 
                 val finalThreadIdIndex = if (threadIdIndex != -1) threadIdIndex else it.getColumnIndex("thread_id")
 
@@ -36,6 +37,7 @@ class SmsRepository(private val context: Context) {
                         val threadId = if (finalThreadIdIndex != -1) it.getLong(finalThreadIdIndex) else 0L
                         var snippet = if (snippetIndex != -1) it.getString(snippetIndex) ?: "" else ""
                         var date = if (dateIndex != -1) it.getLong(dateIndex) else 0
+                        val isRead = if (readIndex != -1) it.getInt(readIndex) == 1 else true
                         
                         // Normalize date: seconds to milliseconds
                         if (date > 0 && date < 1000000000000L) date *= 1000
@@ -69,7 +71,8 @@ class SmsRepository(private val context: Context) {
                                 date = date,
                                 contactName = contactInfo.first,
                                 contactPhotoUri = contactInfo.second,
-                                isEncrypted = isEncrypted
+                                isEncrypted = isEncrypted,
+                                isRead = isRead
                             )
                         )
                     } catch (e: Exception) {
@@ -545,6 +548,33 @@ class SmsRepository(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e("SmsRepository", "Error saving received MMS", e)
+        }
+    }
+
+    fun markAsRead(threadId: Long) {
+        val values = ContentValues().apply {
+            put("read", 1)
+        }
+        val selection = "thread_id = ? AND read = 0"
+        val selectionArgs = arrayOf(threadId.toString())
+
+        try {
+            // Mark SMS as read
+            context.contentResolver.update(
+                Telephony.Sms.CONTENT_URI,
+                values,
+                selection,
+                selectionArgs
+            )
+            // Mark MMS as read
+            context.contentResolver.update(
+                Telephony.Mms.CONTENT_URI,
+                values,
+                selection,
+                selectionArgs
+            )
+        } catch (e: Exception) {
+            Log.e("SmsRepository", "Error marking thread $threadId as read", e)
         }
     }
 }

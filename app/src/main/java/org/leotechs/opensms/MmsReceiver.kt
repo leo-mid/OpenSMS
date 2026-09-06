@@ -31,6 +31,8 @@ class MmsReceiver : BroadcastReceiver() {
                     
                     if (AppState.currentThreadId != threadId) {
                         NotificationHelper.showNotification(context, threadId, from, "You have a new MMS message")
+                    } else {
+                        SmsRepository(context).markAsRead(threadId)
                     }
                     
                     if (uri != null) {

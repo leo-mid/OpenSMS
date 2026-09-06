@@ -145,26 +145,47 @@ fun ConversationItem(conversation: Conversation, onClick: () -> Unit) {
             )
         },
         leadingContent = {
-            if (conversation.contactPhotoUri != null) {
-                AsyncImage(
-                    model = conversation.contactPhotoUri,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(Color.Gray),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = (conversation.contactName ?: conversation.address).take(1).uppercase(),
-                        color = Color.White
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Unread dot
+                if (!conversation.isRead) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
                     )
+                } else {
+                    // Spacer to keep layout consistent if we want to align images
+                    // Or just let it collapse if we prefer. 
+                    // The user said "far left pass the contact picture", which usually means the dot pushes the picture to the right.
+                    // If we want the pictures to align, we should put a spacer here.
+                    Spacer(modifier = Modifier.size(10.dp))
+                }
+
+                if (conversation.contactPhotoUri != null) {
+                    AsyncImage(
+                        model = conversation.contactPhotoUri,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color.Gray),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = (conversation.contactName ?: conversation.address).take(1).uppercase(),
+                            color = Color.White
+                        )
+                    }
                 }
             }
         },

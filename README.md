@@ -31,7 +31,7 @@ These features are coming soon in list of greater priority:
 The app needs the following permissions to function:
 * SMS (required)
 * Camera (optional)
-* Contacts
+* Contacts (optional)
 * Photo Gallery (optional)
 
 ### How to Install

@@ -410,12 +410,21 @@ fun MessageItem(message: Message) {
                 }
             },
             text = {
-                AsyncImage(
-                    model = message.mediaUri,
-                    contentDescription = "Full Screen Media",
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.Fit
-                )
+                if (message.mediaContentType?.startsWith("video/") == true) {
+                    VideoPlayer(
+                        uri = message.mediaUri!!,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(16f / 9f)
+                    )
+                } else {
+                    AsyncImage(
+                        model = message.mediaUri,
+                        contentDescription = "Full Screen Media",
+                        modifier = Modifier.fillMaxWidth(),
+                        contentScale = ContentScale.Fit
+                    )
+                }
             }
         )
     }

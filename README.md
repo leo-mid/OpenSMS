@@ -5,24 +5,26 @@ communicate with any third party services. Doesn't even need Google Play Service
 
 ### Current Features
 As this app is still well into its early development phase there are currently a lot of missing features.
-As of version 1.1.0 there is:
-* Support for SMS
-* Support for MMS
-* Conversation Lists
-* Contacts shown in Conversation Lists
-* Live messaging support (Updates when message is received)
+As of version 1.1.1 there is:
+* Support for SMS (1.0.0)
+* Support for MMS (1.1.0)
+* Conversation Lists (1.1.0)
+* Contacts shown in Conversation Lists (1.1.0)
+* Live messaging support (Updates when message is received) (1.1.0)
+* Creating new conversations (1.1.1)
 
 ### Upcoming Features
 These features are coming soon in list of greater priority:
-* Creating new conversations
+* Video Playback
 * Notifications
+* Creating Contacts
 * How messages are loaded to be viewed
 * Group conversations (Possibly already works - not tested)
 * Deleting conversations
 * Deleting messages
 * Seeing unread messages
+* Message actions such as saving MMS to device
 * Enabling Encrypted SMS (Would only work if both/everyone has this app)
-* Creating Contacts
 * Blocking Contacts
 * Start a call via the app
 * Message bubble color customization

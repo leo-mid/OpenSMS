@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -34,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -50,36 +52,10 @@ fun ConversationList(
     onConversationClick: (Long, String?) -> Unit,
     onRequestDefault: () -> Unit,
     modifier: Modifier = Modifier,
-    onNewConversation: () -> Unit = {}
+    onNewConversation: () -> Unit = {},
+    viewModel: ConversationViewModel = viewModel()
 ) {
-    val context = LocalContext.current
-    val repository = remember { SmsRepository(context) }
-    val conversations = remember { mutableStateListOf<Conversation>() }
-
-    fun refresh() {
-        conversations.clear()
-        conversations.addAll(repository.getConversations())
-    }
-
-    LaunchedEffect(Unit) {
-        refresh()
-    }
-
-    DisposableEffect(Unit) {
-        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) {
-                refresh()
-            }
-        }
-        context.contentResolver.registerContentObserver(
-            Uri.parse("content://mms-sms/"),
-            true,
-            observer
-        )
-        onDispose {
-            context.contentResolver.unregisterContentObserver(observer)
-        }
-    }
+    val conversations by viewModel.conversations.collectAsState()
 
     Box(modifier = modifier) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -102,46 +78,48 @@ fun ConversationList(
 
             LazyColumn(modifier = Modifier.weight(1f)) {
                 items(conversations, key = { it.threadId }) { conversation ->
+                    val currentConversation by rememberUpdatedState(conversation)
                     val dismissState = rememberSwipeToDismissBoxState(
-                        positionalThreshold = { distance -> distance * 0.7f }
-                    )
-
-                    LaunchedEffect(dismissState.currentValue) {
-                        if (dismissState.currentValue == SwipeToDismissBoxValue.StartToEnd) {
-                            if (conversation.isRead) {
-                                repository.markAsUnread(conversation.threadId)
+                        confirmValueChange = { value ->
+                            if (value == SwipeToDismissBoxValue.StartToEnd) {
+                                viewModel.toggleReadStatus(
+                                    currentConversation.threadId,
+                                    currentConversation.isRead
+                                )
+                                false
                             } else {
-                                repository.markAsRead(conversation.threadId)
+                                false
                             }
-                            refresh()
-                            dismissState.snapTo(SwipeToDismissBoxValue.Settled)
-                        }
-                    }
+                        },
+                        positionalThreshold = { totalDistance -> totalDistance * 0.8f }
+                    )
 
                     SwipeToDismissBox(
                         state = dismissState,
+                        enableDismissFromStartToEnd = true,
+                        enableDismissFromEndToStart = false,
                         backgroundContent = {
-                            val color = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                Color.Transparent
-                            }
+                            // Use graphicsLayer for alpha to avoid recomposition
                             Box(
                                 Modifier
                                     .fillMaxSize()
-                                    .background(color)
+                                    .graphicsLayer {
+                                        alpha = if (dismissState.progress > 0f) 1f else 0f
+                                    }
+                                    .background(MaterialTheme.colorScheme.primary)
                                     .padding(horizontal = 20.dp),
                                 contentAlignment = Alignment.CenterStart
                             ) {
                                 Text(
                                     text = if (conversation.isRead) "Mark as Unread" else "Mark as Read",
                                     color = Color.White,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.graphicsLayer {
+                                        alpha = if (dismissState.progress > 0.4f) 1f else 0f
+                                    }
                                 )
                             }
-                        },
-                        enableDismissFromStartToEnd = true,
-                        enableDismissFromEndToStart = false
+                        }
                     ) {
                         ConversationItem(conversation) {
                             onConversationClick(conversation.threadId, conversation.contactName)
@@ -177,14 +155,15 @@ fun ConversationItem(conversation: Conversation, onClick: () -> Unit) {
         headlineContent = {
             Text(
                 text = conversation.contactName ?: conversation.address,
-                fontWeight = FontWeight.Bold
+                fontWeight = if (conversation.isRead) FontWeight.Normal else FontWeight.Bold
             )
         },
         supportingContent = {
             Text(
                 text = conversation.snippet,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = if (conversation.isRead) FontWeight.Normal else FontWeight.Medium
             )
         },
         leadingContent = {
@@ -198,13 +177,9 @@ fun ConversationItem(conversation: Conversation, onClick: () -> Unit) {
                         modifier = Modifier
                             .size(10.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
+                            .background(Color(0xFFF57C00))
                     )
                 } else {
-                    // Spacer to keep layout consistent if we want to align images
-                    // Or just let it collapse if we prefer. 
-                    // The user said "far left pass the contact picture", which usually means the dot pushes the picture to the right.
-                    // If we want the pictures to align, we should put a spacer here.
                     Spacer(modifier = Modifier.size(10.dp))
                 }
 

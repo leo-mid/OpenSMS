@@ -7,45 +7,63 @@ import android.provider.ContactsContract
 import android.provider.Telephony
 import android.util.Log
 import com.google.android.mms.pdu_alt.*
+import kotlin.math.abs
 
 class SmsRepository(private val context: Context) {
 
+    private val contactCache = mutableMapOf<String, Pair<String?, String?>>()
+    private val addressCache = mutableMapOf<Long, String>()
+    private val canonicalAddressCache = mutableMapOf<Long, String>()
+
     fun getConversations(): List<Conversation> {
         val conversations = mutableListOf<Conversation>()
-        val contentResolver = context.contentResolver
         
+        // Pre-fetch data to avoid sub-queries in the loop
+        loadCanonicalAddresses()
+        val lastMmsInfo = getLastMmsInfo()
+        val attachmentCounts = getAttachmentCounts()
+
         try {
+            // Using a specific projection for performance
+            val projection = arrayOf("_id", "snippet", "date", "read", "recipient_ids")
             val uri = Uri.parse("content://mms-sms/conversations?simple=true")
-            val cursor = contentResolver.query(
+            val cursor = context.contentResolver.query(
                 uri,
-                null,
+                projection,
                 null,
                 null,
                 "date DESC"
             )
 
             cursor?.use {
-                val threadIdIndex = it.getColumnIndex("_id")
-                val snippetIndex = it.getColumnIndex("snippet")
-                val dateIndex = it.getColumnIndex("date")
-                val readIndex = it.getColumnIndex("read")
-
-                val finalThreadIdIndex = if (threadIdIndex != -1) threadIdIndex else it.getColumnIndex("thread_id")
+                val threadIdIdx = it.getColumnIndex("_id")
+                val snippetIdx = it.getColumnIndex("snippet")
+                val dateIdx = it.getColumnIndex("date")
+                val readIdx = it.getColumnIndex("read")
+                val recipientIdsIdx = it.getColumnIndex("recipient_ids")
 
                 while (it.moveToNext()) {
                     try {
-                        val threadId = if (finalThreadIdIndex != -1) it.getLong(finalThreadIdIndex) else 0L
-                        var snippet = if (snippetIndex != -1) it.getString(snippetIndex) ?: "" else ""
-                        var date = if (dateIndex != -1) it.getLong(dateIndex) else 0
-                        val isRead = if (readIndex != -1) it.getInt(readIndex) == 1 else true
+                        val threadId = it.getLong(threadIdIdx)
+                        var snippet = it.getString(snippetIdx) ?: ""
+                        var date = it.getLong(dateIdx)
+                        val isRead = it.getInt(readIdx) == 1
                         
                         // Normalize date: seconds to milliseconds
                         if (date > 0 && date < 1000000000000L) date *= 1000
 
-                        val mmsId = isLastMessageMms(threadId)
-                        if (mmsId != null) {
-                            val count = getMmsAttachmentCount(mmsId)
-                            snippet = "Attachment: $count"
+                        // Optimization: Determine if last message was MMS using pre-fetched data
+                        val mmsData = lastMmsInfo[threadId]
+                        if (mmsData != null) {
+                            val (mmsId, mmsDate) = mmsData
+                            // If MMS date matches the conversation date (within 2s buffer for precision)
+                            if (abs(mmsDate - date) < 2000) {
+                                val count = attachmentCounts[mmsId] ?: 0
+                                // If snippet is empty, it's likely a media-only MMS
+                                if (snippet.isBlank() || count > 0) {
+                                    snippet = if (count > 0) "Attachment: $count" else "MMS Message"
+                                }
+                            }
                         }
 
                         // Ensure snippet is never blank
@@ -53,12 +71,29 @@ class SmsRepository(private val context: Context) {
                             snippet = "New Message"
                         }
 
-                        val address = getAddressForThread(threadId) ?: "Unknown"
-                        val contactInfo = getContactInfo(address)
+                        // Optimization: Get address from cache or pre-loaded canonical addresses
+                        val address = addressCache.getOrPut(threadId) {
+                            val recipientIds = it.getString(recipientIdsIdx) ?: ""
+                            if (recipientIds.isNotEmpty()) {
+                                val ids = recipientIds.split(" ")
+                                if (ids.isNotEmpty()) {
+                                    canonicalAddressCache[ids[0].toLongOrNull() ?: -1L] ?: "Unknown"
+                                } else "Unknown"
+                            } else "Unknown"
+                        }
+
+                        // Optimization: Use contact cache to avoid repeated ContactsContract queries
+                        val contactInfo = contactCache.getOrPut(address) {
+                            getContactInfo(address)
+                        }
 
                         val isEncrypted = snippet.startsWith("[ENC]")
                         val displaySnippet = if (isEncrypted) {
-                            "[Decrypted] " + CryptoUtils.decrypt(snippet.substring(5))
+                            try {
+                                "[Decrypted] " + CryptoUtils.decrypt(snippet.substring(5))
+                            } catch (e: Exception) {
+                                snippet
+                            }
                         } else {
                             snippet
                         }
@@ -87,6 +122,7 @@ class SmsRepository(private val context: Context) {
     }
 
     fun getAddressForThread(threadId: Long): String? {
+        addressCache[threadId]?.let { return it }
         try {
             // Try MMS first
             val mmsCursor = context.contentResolver.query(
@@ -270,6 +306,74 @@ class SmsRepository(private val context: Context) {
         } else {
             null
         }
+    }
+
+    private fun loadCanonicalAddresses() {
+        if (canonicalAddressCache.isNotEmpty()) return
+        try {
+            val uri = Uri.parse("content://mms-sms/canonical-addresses")
+            context.contentResolver.query(uri, arrayOf("_id", "address"), null, null, null)?.use { cursor ->
+                val idIdx = cursor.getColumnIndex("_id")
+                val addrIdx = cursor.getColumnIndex("address")
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idIdx)
+                    val addr = cursor.getString(addrIdx)
+                    if (addr != null) canonicalAddressCache[id] = addr
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("SmsRepository", "Error loading canonical addresses", e)
+        }
+    }
+
+    private fun getLastMmsInfo(): Map<Long, Pair<Long, Long>> {
+        val map = mutableMapOf<Long, Pair<Long, Long>>() // threadId -> (mmsId, date)
+        try {
+            val cursor = context.contentResolver.query(
+                Telephony.Mms.CONTENT_URI,
+                arrayOf(Telephony.Mms.THREAD_ID, Telephony.Mms._ID, Telephony.Mms.DATE),
+                null, null, "date DESC"
+            )
+            cursor?.use {
+                val threadIdIdx = it.getColumnIndex(Telephony.Mms.THREAD_ID)
+                val idIdx = it.getColumnIndex(Telephony.Mms._ID)
+                val dateIdx = it.getColumnIndex(Telephony.Mms.DATE)
+                while (it.moveToNext()) {
+                    val threadId = it.getLong(threadIdIdx)
+                    if (!map.containsKey(threadId)) {
+                        var date = it.getLong(dateIdx)
+                        if (date > 0 && date < 1000000000000L) date *= 1000
+                        map[threadId] = Pair(it.getLong(idIdx), date)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("SmsRepository", "Error pre-fetching last MMS info", e)
+        }
+        return map
+    }
+
+    private fun getAttachmentCounts(): Map<Long, Int> {
+        val map = mutableMapOf<Long, Int>()
+        try {
+            val uri = Uri.parse("content://mms/part")
+            val cursor = context.contentResolver.query(
+                uri,
+                arrayOf("mid"),
+                "ct != 'application/smil' AND ct != 'text/plain'",
+                null, null
+            )
+            cursor?.use {
+                val midIdx = it.getColumnIndex("mid")
+                while (it.moveToNext()) {
+                    val mid = it.getLong(midIdx)
+                    map[mid] = (map[mid] ?: 0) + 1
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("SmsRepository", "Error pre-fetching attachment counts", e)
+        }
+        return map
     }
 
     private fun getMmsAttachmentCount(mmsId: Long): Int {
@@ -568,19 +672,20 @@ class SmsRepository(private val context: Context) {
 
         try {
             // Update SMS
-            context.contentResolver.update(
+            val smsCount = context.contentResolver.update(
                 Telephony.Sms.CONTENT_URI,
                 values,
                 selection,
                 selectionArgs
             )
             // Update MMS
-            context.contentResolver.update(
+            val mmsCount = context.contentResolver.update(
                 Telephony.Mms.CONTENT_URI,
                 values,
                 selection,
                 selectionArgs
             )
+            Log.d("SmsRepository", "Updated read status to $isRead for thread $threadId. SMS: $smsCount, MMS: $mmsCount")
         } catch (e: Exception) {
             Log.e("SmsRepository", "Error setting thread $threadId read status to $isRead", e)
         }

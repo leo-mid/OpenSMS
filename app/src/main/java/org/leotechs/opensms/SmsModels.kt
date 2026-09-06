@@ -23,3 +23,9 @@ data class Message(
     val mediaUri: Uri? = null,
     val mediaContentType: String? = null
 )
+
+data class Contact(
+    val name: String,
+    val number: String,
+    val photoUri: String? = null
+)

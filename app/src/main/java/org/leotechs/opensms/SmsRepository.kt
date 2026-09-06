@@ -83,7 +83,7 @@ class SmsRepository(private val context: Context) {
         return conversations
     }
 
-    private fun getAddressForThread(threadId: Long): String? {
+    fun getAddressForThread(threadId: Long): String? {
         try {
             // Try MMS first
             val mmsCursor = context.contentResolver.query(
@@ -368,7 +368,38 @@ class SmsRepository(private val context: Context) {
         }
     }
 
-    private fun getContactInfo(phoneNumber: String): Pair<String?, String?> {
+    fun searchContacts(query: String): List<Contact> {
+        if (query.isBlank()) return emptyList()
+        val contacts = mutableListOf<Contact>()
+        val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
+        val projection = arrayOf(
+            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+            ContactsContract.CommonDataKinds.Phone.NUMBER,
+            ContactsContract.CommonDataKinds.Phone.PHOTO_THUMBNAIL_URI
+        )
+        val selection = "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ? OR ${ContactsContract.CommonDataKinds.Phone.NUMBER} LIKE ?"
+        val selectionArgs = arrayOf("%$query%", "%$query%")
+
+        try {
+            context.contentResolver.query(uri, projection, selection, selectionArgs, null)?.use { cursor ->
+                val nameIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                val numberIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                val photoIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.PHOTO_THUMBNAIL_URI)
+
+                while (cursor.moveToNext()) {
+                    val name = cursor.getString(nameIdx)
+                    val number = cursor.getString(numberIdx)
+                    val photo = cursor.getString(photoIdx)
+                    contacts.add(Contact(name, number, photo))
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("SmsRepository", "Error searching contacts", e)
+        }
+        return contacts.distinctBy { it.number }
+    }
+
+    fun getContactInfo(phoneNumber: String): Pair<String?, String?> {
         val uri = Uri.withAppendedPath(
             ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
             Uri.encode(phoneNumber)
@@ -392,13 +423,24 @@ class SmsRepository(private val context: Context) {
         return Pair(null, null)
     }
 
-    fun saveSentSms(address: String, body: String) {
+    fun getOrCreateThreadId(address: String): Long {
+        return try {
+            Telephony.Threads.getOrCreateThreadId(context, address)
+        } catch (e: Exception) {
+            Log.e("SmsRepository", "Error getting/creating thread ID", e)
+            0L
+        }
+    }
+
+    fun saveSentSms(address: String, body: String, threadId: Long? = null) {
+        val finalThreadId = threadId ?: getOrCreateThreadId(address)
         val values = ContentValues().apply {
             put(Telephony.Sms.ADDRESS, address)
             put(Telephony.Sms.BODY, body)
             put(Telephony.Sms.DATE, System.currentTimeMillis())
             put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
             put(Telephony.Sms.READ, 1)
+            put(Telephony.Sms.THREAD_ID, finalThreadId)
         }
         try {
             context.contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
@@ -422,13 +464,13 @@ class SmsRepository(private val context: Context) {
         }
     }
 
-    fun saveSentMms(address: String, mediaUri: Uri) {
+    fun saveSentMms(address: String, mediaUri: Uri, threadId: Long? = null) {
         try {
-            val threadId = Telephony.Threads.getOrCreateThreadId(context, address)
+            val finalThreadId = threadId ?: getOrCreateThreadId(address)
 
             // 1. Insert MMS header
             val values = ContentValues().apply {
-                put(Telephony.Mms.THREAD_ID, threadId)
+                put(Telephony.Mms.THREAD_ID, finalThreadId)
                 put(Telephony.Mms.MESSAGE_BOX, Telephony.Mms.MESSAGE_BOX_SENT)
                 put(Telephony.Mms.DATE, System.currentTimeMillis() / 1000)
                 put(Telephony.Mms.READ, 1)

@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
     private var isDefaultSmsApp by mutableStateOf(false)
     private var currentThreadId by mutableStateOf<Long?>(null)
     private var currentContactName by mutableStateOf<String?>(null)
+    private var isCreatingNewConversation by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,29 +51,51 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize()
                 ) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding)) {
-                        if (currentThreadId == null) {
-                            ConversationList(
-                                isDefault = isDefaultSmsApp,
-                                onConversationClick = { threadId, name ->
-                                    currentThreadId = threadId
-                                    currentContactName = name
-                                },
-                                onRequestDefault = { requestDefaultSmsRole() },
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            MessageDetail(
-                                threadId = currentThreadId!!,
-                                contactName = currentContactName,
-                                onBack = { currentThreadId = null },
-                                onSendSms = { number: String, message: String, encrypt: Boolean ->
-                                    sendSms(number, message, encrypt)
-                                },
-                                onSendMms = { number: String, uri: Uri ->
-                                    sendMms(number, uri)
-                                },
-                                modifier = Modifier.fillMaxSize()
-                            )
+                        when {
+                            isCreatingNewConversation -> {
+                                NewConversationScreen(
+                                    onBack = { isCreatingNewConversation = false },
+                                    onMessageSent = { threadId, address ->
+                                        currentThreadId = threadId
+                                        isCreatingNewConversation = false
+                                        val contactInfo = SmsRepository(this@MainActivity).getContactInfo(address)
+                                        currentContactName = contactInfo.first
+                                    },
+                                    onSendSms = { number, message, encrypt ->
+                                        sendSms(number, message, encrypt)
+                                    },
+                                    onSendMms = { number, uri ->
+                                        sendMms(number, uri)
+                                    },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                            currentThreadId == null -> {
+                                ConversationList(
+                                    isDefault = isDefaultSmsApp,
+                                    onConversationClick = { threadId, name ->
+                                        currentThreadId = threadId
+                                        currentContactName = name
+                                    },
+                                    onRequestDefault = { requestDefaultSmsRole() },
+                                    onNewConversation = { isCreatingNewConversation = true },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                            else -> {
+                                MessageDetail(
+                                    threadId = currentThreadId!!,
+                                    contactName = currentContactName,
+                                    onBack = { currentThreadId = null },
+                                    onSendSms = { number: String, message: String, encrypt: Boolean ->
+                                        sendSms(number, message, encrypt)
+                                    },
+                                    onSendMms = { number: String, uri: Uri ->
+                                        sendMms(number, uri)
+                                    },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                         }
                     }
                 }
@@ -112,8 +135,11 @@ class MainActivity : ComponentActivity() {
                 message
             }
 
+            val repository = SmsRepository(this)
+            val threadId = repository.getOrCreateThreadId(phoneNumber)
+
             smsManager.sendTextMessage(phoneNumber, null, finalMessage, null, null)
-            SmsRepository(this).saveSentSms(phoneNumber, finalMessage)
+            repository.saveSentSms(phoneNumber, finalMessage, threadId)
             Toast.makeText(this, "Message sent!", Toast.LENGTH_SHORT).show()
             true
         } catch (e: Exception) {
@@ -124,11 +150,14 @@ class MainActivity : ComponentActivity() {
 
     private fun sendMms(phoneNumber: String, uri: Uri): Boolean {
         try {
+            val repository = SmsRepository(this)
+            val threadId = repository.getOrCreateThreadId(phoneNumber)
+
             // 1. Send via network
             MmsUtils.sendMms(this, phoneNumber, uri)
             
             // 2. Save to database
-            SmsRepository(this).saveSentMms(phoneNumber, uri)
+            repository.saveSentMms(phoneNumber, uri, threadId)
             
             Toast.makeText(this, "MMS Sending...", Toast.LENGTH_SHORT).show()
             return true

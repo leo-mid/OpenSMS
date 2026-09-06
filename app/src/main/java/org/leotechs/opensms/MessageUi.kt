@@ -106,13 +106,13 @@ fun ConversationList(
                                     .graphicsLayer {
                                         alpha = if (dismissState.progress > 0f) 1f else 0f
                                     }
-                                    .background(MaterialTheme.colorScheme.primary)
+                                    .background(Color(0xFFBBDEFB))
                                     .padding(horizontal = 20.dp),
                                 contentAlignment = Alignment.CenterStart
                             ) {
                                 Text(
                                     text = if (conversation.isRead) "Mark as Unread" else "Mark as Read",
-                                    color = Color.White,
+                                    color = Color(0xFF01579B),
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.graphicsLayer {
                                         alpha = if (dismissState.progress > 0.4f) 1f else 0f
@@ -177,7 +177,7 @@ fun ConversationItem(conversation: Conversation, onClick: () -> Unit) {
                         modifier = Modifier
                             .size(10.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFF57C00))
+                            .background(Color(0xFF007AFF))
                     )
                 } else {
                     Spacer(modifier = Modifier.size(10.dp))

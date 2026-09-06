@@ -48,7 +48,8 @@ fun ConversationList(
     isDefault: Boolean,
     onConversationClick: (Long, String?) -> Unit,
     onRequestDefault: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onNewConversation: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val repository = remember { SmsRepository(context) }
@@ -79,31 +80,45 @@ fun ConversationList(
         }
     }
 
-    Column(modifier = modifier) {
-        Text(
-            text = "Messages",
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(16.dp)
-        )
-        if (!isDefault) {
-            Button(
-                onClick = onRequestDefault,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Text("Set as Default SMS App")
+    Box(modifier = modifier) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Text(
+                text = "Messages",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(16.dp)
+            )
+            if (!isDefault) {
+                Button(
+                    onClick = onRequestDefault,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Text("Set as Default SMS App")
+                }
+            }
+
+            LazyColumn(modifier = Modifier.weight(1f)) {
+                items(conversations) { conversation ->
+                    ConversationItem(conversation) {
+                        onConversationClick(conversation.threadId, conversation.contactName)
+                    }
+                    HorizontalDivider()
+                }
             }
         }
 
-        LazyColumn {
-            items(conversations) { conversation ->
-                ConversationItem(conversation) {
-                    onConversationClick(conversation.threadId, conversation.contactName)
-                }
-                HorizontalDivider()
-            }
+        FloatingActionButton(
+            onClick = onNewConversation,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(24.dp),
+            shape = CircleShape,
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "New Message")
         }
     }
 }

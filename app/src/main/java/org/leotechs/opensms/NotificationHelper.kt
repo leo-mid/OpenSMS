@@ -79,4 +79,8 @@ object NotificationHelper {
             }
         }
     }
+
+    fun cancelNotification(context: Context, threadId: Long) {
+        NotificationManagerCompat.from(context).cancel(threadId.toInt())
+    }
 }

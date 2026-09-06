@@ -23,6 +23,7 @@ class SmsReceiver : BroadcastReceiver() {
                     NotificationHelper.showNotification(context, threadId, sender, body)
                 } else {
                     repository.markAsRead(threadId)
+                    NotificationHelper.cancelNotification(context, threadId)
                 }
                 
                 Log.d("SmsReceiver", "Saved SMS from $sender")

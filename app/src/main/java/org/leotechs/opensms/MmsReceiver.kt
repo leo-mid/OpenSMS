@@ -33,6 +33,7 @@ class MmsReceiver : BroadcastReceiver() {
                         NotificationHelper.showNotification(context, threadId, from, "You have a new MMS message")
                     } else {
                         SmsRepository(context).markAsRead(threadId)
+                        NotificationHelper.cancelNotification(context, threadId)
                     }
                     
                     if (uri != null) {

@@ -44,6 +44,7 @@ class MainActivity : ComponentActivity() {
             currentThreadId = intentThreadId
             AppState.currentThreadId = intentThreadId
             SmsRepository(this).markAsRead(intentThreadId)
+            NotificationHelper.cancelNotification(this, intentThreadId)
         }
 
         if (!isDefaultSmsApp) {
@@ -87,6 +88,7 @@ class MainActivity : ComponentActivity() {
                                         AppState.currentThreadId = threadId
                                         currentContactName = name
                                         SmsRepository(this@MainActivity).markAsRead(threadId)
+                                        NotificationHelper.cancelNotification(this@MainActivity, threadId)
                                     },
                                     onRequestDefault = { requestDefaultSmsRole() },
                                     onNewConversation = { isCreatingNewConversation = true },
@@ -143,6 +145,7 @@ class MainActivity : ComponentActivity() {
                 currentThreadId = threadId
                 AppState.currentThreadId = threadId
                 SmsRepository(this).markAsRead(threadId)
+                NotificationHelper.cancelNotification(this, threadId)
             }
         }
     }

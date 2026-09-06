@@ -1,6 +1,9 @@
 package org.leotechs.opensms
 
+import android.database.ContentObserver
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -20,7 +23,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,9 +54,29 @@ fun ConversationList(
     val repository = remember { SmsRepository(context) }
     val conversations = remember { mutableStateListOf<Conversation>() }
 
-    LaunchedEffect(Unit) {
+    fun refresh() {
         conversations.clear()
         conversations.addAll(repository.getConversations())
+    }
+
+    LaunchedEffect(Unit) {
+        refresh()
+    }
+
+    DisposableEffect(Unit) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                refresh()
+            }
+        }
+        context.contentResolver.registerContentObserver(
+            Uri.parse("content://mms-sms/"),
+            true,
+            observer
+        )
+        onDispose {
+            context.contentResolver.unregisterContentObserver(observer)
+        }
     }
 
     Column(modifier = modifier) {
@@ -181,7 +203,6 @@ fun MessageDetail(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val repository = remember { SmsRepository(context) }
     val messages = remember { mutableStateListOf<Message>() }
     var phoneNumber by remember { mutableStateOf("") }
@@ -194,13 +215,7 @@ fun MessageDetail(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success && tempImageUri != null) {
-            if (onSendMms(phoneNumber, tempImageUri!!)) {
-                scope.launch {
-                    val msgs = repository.getMessages(threadId)
-                    messages.clear()
-                    messages.addAll(msgs)
-                }
-            }
+            onSendMms(phoneNumber, tempImageUri!!)
         }
     }
 
@@ -208,13 +223,7 @@ fun MessageDetail(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
-            if (onSendMms(phoneNumber, uri)) {
-                scope.launch {
-                    val msgs = repository.getMessages(threadId)
-                    messages.clear()
-                    messages.addAll(msgs)
-                }
-            }
+            onSendMms(phoneNumber, uri)
         }
     }
 
@@ -229,12 +238,32 @@ fun MessageDetail(
 
     BackHandler(onBack = onBack)
 
-    LaunchedEffect(threadId) {
+    fun refreshMessages() {
         val msgs = repository.getMessages(threadId)
         messages.clear()
         messages.addAll(msgs)
         if (msgs.isNotEmpty()) {
             phoneNumber = msgs.last().address
+        }
+    }
+
+    LaunchedEffect(threadId) {
+        refreshMessages()
+    }
+
+    DisposableEffect(threadId) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                refreshMessages()
+            }
+        }
+        context.contentResolver.registerContentObserver(
+            Uri.parse("content://mms-sms/"),
+            true,
+            observer
+        )
+        onDispose {
+            context.contentResolver.unregisterContentObserver(observer)
         }
     }
 
@@ -342,9 +371,6 @@ fun MessageDetail(
                     Button(onClick = {
                         if (onSendSms(phoneNumber, messageText, false)) {
                             messageText = ""
-                            val msgs = repository.getMessages(threadId)
-                            messages.clear()
-                            messages.addAll(msgs)
                         }
                     }) {
                         Text("Send")

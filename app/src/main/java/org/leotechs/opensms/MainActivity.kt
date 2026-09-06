@@ -36,7 +36,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        NotificationHelper.createNotificationChannel(this)
         checkDefaultSmsStatus()
+
+        val intentThreadId = intent.getLongExtra("THREAD_ID", -1L)
+        if (intentThreadId != -1L) {
+            currentThreadId = intentThreadId
+            AppState.currentThreadId = intentThreadId
+        }
 
         if (!isDefaultSmsApp) {
             requestDefaultSmsRole()
@@ -57,6 +64,7 @@ class MainActivity : ComponentActivity() {
                                     onBack = { isCreatingNewConversation = false },
                                     onMessageSent = { threadId, address ->
                                         currentThreadId = threadId
+                                        AppState.currentThreadId = threadId
                                         isCreatingNewConversation = false
                                         val contactInfo = SmsRepository(this@MainActivity).getContactInfo(address)
                                         currentContactName = contactInfo.first
@@ -75,6 +83,7 @@ class MainActivity : ComponentActivity() {
                                     isDefault = isDefaultSmsApp,
                                     onConversationClick = { threadId, name ->
                                         currentThreadId = threadId
+                                        AppState.currentThreadId = threadId
                                         currentContactName = name
                                     },
                                     onRequestDefault = { requestDefaultSmsRole() },
@@ -86,7 +95,10 @@ class MainActivity : ComponentActivity() {
                                 MessageDetail(
                                     threadId = currentThreadId!!,
                                     contactName = currentContactName,
-                                    onBack = { currentThreadId = null },
+                                    onBack = { 
+                                        currentThreadId = null 
+                                        AppState.currentThreadId = null
+                                    },
                                     onSendSms = { number: String, message: String, encrypt: Boolean ->
                                         sendSms(number, message, encrypt)
                                     },
@@ -119,6 +131,17 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         checkDefaultSmsStatus()
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent?.getLongExtra("THREAD_ID", -1L)?.let { threadId ->
+            if (threadId != -1L) {
+                currentThreadId = threadId
+                AppState.currentThreadId = threadId
+            }
+        }
     }
 
     private fun sendSms(phoneNumber: String, message: String, encrypt: Boolean): Boolean {
@@ -176,7 +199,8 @@ class MainActivity : ComponentActivity() {
             Manifest.permission.RECEIVE_MMS,
             Manifest.permission.RECEIVE_WAP_PUSH,
             Manifest.permission.READ_CONTACTS,
-            Manifest.permission.CAMERA
+            Manifest.permission.CAMERA,
+            Manifest.permission.POST_NOTIFICATIONS
         )
         
         val toRequest = permissions.filter {

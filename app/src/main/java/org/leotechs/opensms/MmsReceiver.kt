@@ -29,6 +29,10 @@ class MmsReceiver : BroadcastReceiver() {
                     val threadId = Telephony.Threads.getOrCreateThreadId(context, from)
                     val uri = saveMmsNotification(context, pdu, threadId)
                     
+                    if (AppState.currentThreadId != threadId) {
+                        NotificationHelper.showNotification(context, threadId, from, "You have a new MMS message")
+                    }
+                    
                     if (uri != null) {
                         val mmsId = uri.lastPathSegment ?: ""
                         MmsUtils.downloadMms(context, contentLocation, mmsId)

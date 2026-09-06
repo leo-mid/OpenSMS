@@ -15,7 +15,13 @@ class SmsReceiver : BroadcastReceiver() {
                 val sender = sms.displayOriginatingAddress
                 
                 // Save to system database
-                SmsRepository(context).saveReceivedSms(sender, body)
+                val repository = SmsRepository(context)
+                val threadId = repository.getOrCreateThreadId(sender)
+                repository.saveReceivedSms(sender, body)
+                
+                if (AppState.currentThreadId != threadId) {
+                    NotificationHelper.showNotification(context, threadId, sender, body)
+                }
                 
                 Log.d("SmsReceiver", "Saved SMS from $sender")
             }

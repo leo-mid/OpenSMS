@@ -12,10 +12,10 @@ As of version 1.1.1 there is:
 * Contacts shown in Conversation Lists (1.1.0)
 * Live messaging support (Updates when message is received) (1.1.0)
 * Creating new conversations (1.1.1)
+* Video Playback (1.1.1)
 
 ### Upcoming Features
 These features are coming soon in list of greater priority:
-* Video Playback
 * Notifications
 * Creating Contacts
 * How messages are loaded to be viewed

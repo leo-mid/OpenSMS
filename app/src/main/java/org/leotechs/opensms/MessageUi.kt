@@ -43,6 +43,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationList(
     isDefault: Boolean,
@@ -100,9 +101,51 @@ fun ConversationList(
             }
 
             LazyColumn(modifier = Modifier.weight(1f)) {
-                items(conversations) { conversation ->
-                    ConversationItem(conversation) {
-                        onConversationClick(conversation.threadId, conversation.contactName)
+                items(conversations, key = { it.threadId }) { conversation ->
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        positionalThreshold = { distance -> distance * 0.7f }
+                    )
+
+                    LaunchedEffect(dismissState.currentValue) {
+                        if (dismissState.currentValue == SwipeToDismissBoxValue.StartToEnd) {
+                            if (conversation.isRead) {
+                                repository.markAsUnread(conversation.threadId)
+                            } else {
+                                repository.markAsRead(conversation.threadId)
+                            }
+                            refresh()
+                            dismissState.snapTo(SwipeToDismissBoxValue.Settled)
+                        }
+                    }
+
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        backgroundContent = {
+                            val color = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                Color.Transparent
+                            }
+                            Box(
+                                Modifier
+                                    .fillMaxSize()
+                                    .background(color)
+                                    .padding(horizontal = 20.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                Text(
+                                    text = if (conversation.isRead) "Mark as Unread" else "Mark as Read",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        },
+                        enableDismissFromStartToEnd = true,
+                        enableDismissFromEndToStart = false
+                    ) {
+                        ConversationItem(conversation) {
+                            onConversationClick(conversation.threadId, conversation.contactName)
+                        }
                     }
                     HorizontalDivider()
                 }

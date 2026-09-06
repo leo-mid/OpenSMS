@@ -552,21 +552,29 @@ class SmsRepository(private val context: Context) {
     }
 
     fun markAsRead(threadId: Long) {
+        setReadStatus(threadId, true)
+    }
+
+    fun markAsUnread(threadId: Long) {
+        setReadStatus(threadId, false)
+    }
+
+    private fun setReadStatus(threadId: Long, isRead: Boolean) {
         val values = ContentValues().apply {
-            put("read", 1)
+            put("read", if (isRead) 1 else 0)
         }
-        val selection = "thread_id = ? AND read = 0"
+        val selection = "thread_id = ?"
         val selectionArgs = arrayOf(threadId.toString())
 
         try {
-            // Mark SMS as read
+            // Update SMS
             context.contentResolver.update(
                 Telephony.Sms.CONTENT_URI,
                 values,
                 selection,
                 selectionArgs
             )
-            // Mark MMS as read
+            // Update MMS
             context.contentResolver.update(
                 Telephony.Mms.CONTENT_URI,
                 values,
@@ -574,7 +582,7 @@ class SmsRepository(private val context: Context) {
                 selectionArgs
             )
         } catch (e: Exception) {
-            Log.e("SmsRepository", "Error marking thread $threadId as read", e)
+            Log.e("SmsRepository", "Error setting thread $threadId read status to $isRead", e)
         }
     }
 }

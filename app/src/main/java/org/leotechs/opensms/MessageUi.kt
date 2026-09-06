@@ -58,6 +58,7 @@ fun ConversationList(
     val conversations by viewModel.conversations.collectAsState()
 
     Box(modifier = modifier) {
+        // Top view of the conversation list
         Column(modifier = Modifier.fillMaxSize()) {
             Text(
                 text = "Messages",
@@ -76,7 +77,9 @@ fun ConversationList(
                 }
             }
 
+            // Displays the conversations
             LazyColumn(modifier = Modifier.weight(1f)) {
+                // Fetches all the conversations and starts to list them
                 items(conversations, key = { it.threadId }) { conversation ->
                     val currentConversation by rememberUpdatedState(conversation)
                     val dismissState = rememberSwipeToDismissBoxState(
@@ -93,10 +96,12 @@ fun ConversationList(
                         },
                         positionalThreshold = { totalDistance -> totalDistance * 0.8f }
                     )
-
+                    // Handles the marking as read/unread swipe controls
                     SwipeToDismissBox(
                         state = dismissState,
+                        // Left to right
                         enableDismissFromStartToEnd = true,
+                        // Right to Left
                         enableDismissFromEndToStart = false,
                         backgroundContent = {
                             // Use graphicsLayer for alpha to avoid recomposition
@@ -121,6 +126,7 @@ fun ConversationList(
                             }
                         }
                     ) {
+                        // What Actually gets displayed with the tap controls with it
                         ConversationItem(conversation) {
                             onConversationClick(conversation.threadId, conversation.contactName)
                         }
@@ -130,6 +136,7 @@ fun ConversationList(
             }
         }
 
+        // Creates a new conversation button
         FloatingActionButton(
             onClick = onNewConversation,
             modifier = Modifier
@@ -152,12 +159,14 @@ fun ConversationItem(conversation: Conversation, onClick: () -> Unit) {
 
     ListItem(
         modifier = Modifier.clickable { onClick() },
+        // Contact Name / Phone Number
         headlineContent = {
             Text(
                 text = conversation.contactName ?: conversation.address,
                 fontWeight = if (conversation.isRead) FontWeight.Normal else FontWeight.Bold
             )
         },
+        // Message Preview
         supportingContent = {
             Text(
                 text = conversation.snippet,
@@ -183,6 +192,7 @@ fun ConversationItem(conversation: Conversation, onClick: () -> Unit) {
                     Spacer(modifier = Modifier.size(10.dp))
                 }
 
+                // Handles the contact picture information
                 if (conversation.contactPhotoUri != null) {
                     AsyncImage(
                         model = conversation.contactPhotoUri,
@@ -199,10 +209,17 @@ fun ConversationItem(conversation: Conversation, onClick: () -> Unit) {
                             .background(Color.Gray),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = (conversation.contactName ?: conversation.address).take(1).uppercase(),
-                            color = Color.White
-                        )
+                        if (conversation.contactName != null) {
+                            Text(
+                                text = conversation.contactName.take(1).uppercase(),
+                                color = Color.White
+                            )
+                        } else {
+                            Text(
+                                text = "?",
+                                color = Color.White
+                            )
+                        }
                     }
                 }
             }
@@ -213,6 +230,8 @@ fun ConversationItem(conversation: Conversation, onClick: () -> Unit) {
     )
 }
 
+// Controls how the date is formated for the conversation
+// Ex: Yesterday, Weekdays, 6 days ago + mm/dd/YY
 private fun formatConversationDate(timestamp: Long): String {
     val now = Calendar.getInstance()
     val msgDate = Calendar.getInstance().apply { timeInMillis = timestamp }
@@ -264,7 +283,8 @@ fun MessageDetail(
 
     // Media Handling
     var tempImageUri by remember { mutableStateOf<Uri?>(null) }
-    
+
+    // Controls the camera actions
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
@@ -273,6 +293,7 @@ fun MessageDetail(
         }
     }
 
+    // Controls the gallery actions
     val pickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
@@ -281,6 +302,7 @@ fun MessageDetail(
         }
     }
 
+    // Handles camera image creation
     fun createTempUri(): Uri {
         val tempFile = File.createTempFile("captured_image", ".jpg", context.externalCacheDir)
         return FileProvider.getUriForFile(
@@ -321,6 +343,7 @@ fun MessageDetail(
         }
     }
 
+    // Displays the conversation and sets up the current view for it
     BoxWithConstraints(modifier = modifier) {
         val density = LocalDensity.current
         val maxHeight = maxHeight / 2
@@ -330,6 +353,7 @@ fun MessageDetail(
                 .fillMaxSize()
                 .imePadding()
         ) {
+            // Layout of the top part of the conversation view
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -374,6 +398,9 @@ fun MessageDetail(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
             }
+
+            // Send bar information
+            // Creates the icon for the media, text field for the messages, and the send button
 
             Row(
                 modifier = Modifier
@@ -435,11 +462,14 @@ fun MessageDetail(
     }
 }
 
+// Displays all the messages in a conversation
 @Composable
 fun MessageItem(message: Message) {
     val isSent = message.type == 2
     var showFullScreen by remember { mutableStateOf(false) }
 
+    // Creates the view to see media attachments in the conversation
+    // Plays the videos in this box as well
     if (showFullScreen && message.mediaUri != null) {
         AlertDialog(
             onDismissRequest = { showFullScreen = false },
@@ -468,17 +498,21 @@ fun MessageItem(message: Message) {
         )
     }
 
+    // Displays the messages in the conversation
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start
     ) {
         Box(
+            // Standard message box with no images and stuff
             modifier = Modifier
                 .padding(vertical = 4.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(if (isSent) Color(0xFF007AFF) else Color(0xFFE9E9EB))
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
+            // Checks if the message has an attachment and handles it to display it in the correct way
             Column {
                 if (message.isMms && message.mediaUri != null) {
                     val context = LocalContext.current

@@ -25,7 +25,7 @@ These features are coming soon in list of greater priority:
 * Seeing unread messages
 * Message actions such as saving MMS to device
 * Enabling Encrypted SMS (Would only work if both/everyone has this app)
-* Blocking Contacts
+* Blocking Numbers
 * Start a call via the app (Using default calling app)
 * Message Reactions
 * Message bubble color customization

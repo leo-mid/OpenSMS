@@ -381,23 +381,36 @@ fun MessageDetail(
                 
                 withContext(Dispatchers.Main) {
                     if (isRefresh) {
-                        messages.clear()
+                        // Smart Update: Instead of clear() + addAll(), which causes a flash,
+                        // it now compares the new messages with the existing ones.
+                        if (messages.isEmpty()) {
+                            messages.addAll(newMsgs)
+                        } else {
+                            // Find messages in newMsgs that aren't in the list
+                            val existingIds = messages.map { it.id }.toSet()
+                            val reallyNew = newMsgs.filter { !existingIds.contains(it.id) }
+                            if (reallyNew.isNotEmpty()) {
+                                messages.addAll(reallyNew)
+                                messages.sortByDescending { it.date }
+                            }
+                        }
+                    } else {
+                        // Loading older messages (pagination)
+                        val existingIds = messages.map { it.id }.toSet()
+                        val uniqueNewMsgs = newMsgs.filter { !existingIds.contains(it.id) }
+                        messages.addAll(uniqueNewMsgs)
+                        messages.sortByDescending { it.date }
                     }
                     
                     if (newMsgs.size < 30) {
                         canLoadMore = false
                     }
-
-                    // Add only messages not already in the list to avoid duplicates
-                    val existingIds = messages.map { it.id }.toSet()
-                    val uniqueNewMsgs = newMsgs.filter { !existingIds.contains(it.id) }
-                    messages.addAll(uniqueNewMsgs)
                     
-                    // Sort newest to oldest so index 0 is at the bottom with reverseLayout
-                    messages.sortByDescending { it.date }
-                    
-                    if (newMsgs.isNotEmpty()) {
+                    if (!isRefresh && newMsgs.isNotEmpty()) {
                         page++
+                    } else if (isRefresh && messages.isNotEmpty()) {
+                        // If refreshed start back at the first page
+                        page = 1 
                     }
 
                     // Get all addresses for the conversation if not already set
@@ -492,7 +505,9 @@ fun MessageDetail(
             ) {
                 val isGroup = phoneNumber.contains(",")
                 items(messages, key = { it.id }) { message ->
-                    MessageItem(message, isGroup)
+                    Box(modifier = Modifier.animateItem()) {
+                        MessageItem(message, isGroup)
+                    }
                 }
             }
 

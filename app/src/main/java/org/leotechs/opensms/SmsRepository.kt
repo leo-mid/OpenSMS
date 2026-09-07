@@ -200,107 +200,99 @@ class SmsRepository(private val context: Context) {
     fun getMessages(threadId: Long, limit: Int = 30, offset: Int = 0): List<Message> {
         val messages = mutableListOf<Message>()
         
+        // Strategy: Query SMS and MMS separately to use SQL LIMIT for performance,
+        val fetchCount = limit + offset + 20 
+
+        // 1. Query SMS
         try {
-            val uri = Uri.parse("content://mms-sms/conversations/$threadId")
-            // Fetch ALL messages for the thread. We slice in Kotlin to handle inconsistent date formats (ms vs sec)
-            // that cause SQL LIMIT/OFFSET to fail when sorting DESC.
-            val cursor = context.contentResolver.query(
-                uri,
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
                 null,
-                null,
-                null,
-                "date DESC"
-            )
+                "${Telephony.Sms.THREAD_ID} = ?",
+                arrayOf(threadId.toString()),
+                "${Telephony.Sms.DATE} DESC LIMIT $fetchCount"
+            )?.use { cursor ->
+                val idIdx = cursor.getColumnIndex(Telephony.Sms._ID)
+                val bodyIdx = cursor.getColumnIndex(Telephony.Sms.BODY)
+                val dateIdx = cursor.getColumnIndex(Telephony.Sms.DATE)
+                val addressIdx = cursor.getColumnIndex(Telephony.Sms.ADDRESS)
+                val typeIdx = cursor.getColumnIndex(Telephony.Sms.TYPE)
 
-            cursor?.use {
-                val idIdx = it.getColumnIndex("_id")
-                val bodyIdx = it.getColumnIndex("body")
-                val dateIdx = it.getColumnIndex("date")
-                val addressIdx = it.getColumnIndex("address")
-                val typeIdx = it.getColumnIndex("type")
-                val ctIndex = it.getColumnIndex("ct_t")
-                val transportIdx = it.getColumnIndex("transport_type")
-                val mTypeIdx = it.getColumnIndex("m_type")
-                val msgBoxIdx = it.getColumnIndex("msg_box")
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idIdx)
+                    val body = cursor.getString(bodyIdx) ?: ""
+                    var date = cursor.getLong(dateIdx)
+                    val address = cursor.getString(addressIdx) ?: ""
+                    val type = cursor.getInt(typeIdx)
 
-                while (it.moveToNext()) {
-                    val id = if (idIdx != -1) it.getLong(idIdx) else 0
-                    var date = if (dateIdx != -1) it.getLong(dateIdx) else 0
-                    val address = if (addressIdx != -1) it.getString(addressIdx) ?: "" else ""
-                    
-                    val contentType = if (ctIndex != -1) it.getString(ctIndex) else null
-                    val transport = if (transportIdx != -1) it.getString(transportIdx) else null
-                    val mType = if (mTypeIdx != -1) it.getInt(mTypeIdx) else -1
-                    val bodyText = if (bodyIdx != -1) it.getString(bodyIdx) else null
-
-                    // Normalize date: seconds to milliseconds
                     if (date > 0 && date < 1000000000000L) date *= 1000
 
-                    // Broadened MMS detection logic
-                    val isMms = (contentType != null && contentType.contains("multipart")) || 
-                                transport == "mms" || 
-                                mType > 0 || 
-                                (bodyText == null && contentType != null)
-
-                    if (isMms) {
-                        val msgBox = if (msgBoxIdx != -1) it.getInt(msgBoxIdx) else 1
-                        val mmsMedia = getMmsMedia(id)
-                        
-                        // For MMS, we need to find the "other party" address.
-                        // In an incoming message, it's the FROM address (137).
-                        // In an outgoing message, it's the TO address (151).
-                        val otherPartyAddress = if (msgBox == 1) {
-                            getMmsAddress(id, 137)
-                        } else {
-                            getMmsAddress(id, 151)
-                        }
-
-                        messages.add(
-                            Message(
-                                id = "mms_$id",
-                                address = otherPartyAddress ?: address,
-                                body = mmsMedia?.first ?: "",
-                                date = date,
-                                type = if (msgBox == 2) 2 else 1,
-                                isEncrypted = false,
-                                isMms = true,
-                                mediaUri = mmsMedia?.second,
-                                mediaContentType = mmsMedia?.third,
-                                senderAddress = if (msgBox == 1) getMmsAddress(id, 137) else null
-                            )
-                        )
-                    } else {
-                        val body = bodyText ?: ""
-                        val isEncrypted = body.startsWith("[ENC]")
-                        val displayBody = if (isEncrypted) {
+                    val isEncrypted = body.startsWith("[ENC]")
+                    val displayBody = if (isEncrypted) {
+                        try {
                             "[Decrypted] " + CryptoUtils.decrypt(body.substring(5))
-                        } else {
-                            body
-                        }
+                        } catch (e: Exception) { body }
+                    } else body
 
-                        messages.add(
-                            Message(
-                                id = "sms_$id",
-                                address = address,
-                                body = displayBody,
-                                date = date,
-                                type = if (typeIdx != -1) it.getInt(typeIdx) else 1,
-                                isEncrypted = isEncrypted,
-                                isMms = false,
-                                senderAddress = if ((if (typeIdx != -1) it.getInt(typeIdx) else 1) == 2) null else address
-                            )
+                    messages.add(
+                        Message(
+                            id = "sms_$id",
+                            address = address,
+                            body = displayBody,
+                            date = date,
+                            type = type,
+                            isEncrypted = isEncrypted,
+                            isMms = false,
+                            senderAddress = if (type == 2) null else address
                         )
-                    }
+                    )
                 }
             }
-        } catch (e: Exception) {
-            Log.e("SmsRepository", "Error querying unified messages", e)
-        }
-        
-        // Sort the entire unified set by normalized date
+        } catch (e: Exception) { Log.e("SmsRepository", "Error querying SMS", e) }
+
+        // 2. Query MMS
+        try {
+            context.contentResolver.query(
+                Telephony.Mms.CONTENT_URI,
+                null,
+                "${Telephony.Mms.THREAD_ID} = ?",
+                arrayOf(threadId.toString()),
+                "${Telephony.Mms.DATE} DESC LIMIT $fetchCount"
+            )?.use { cursor ->
+                val idIdx = cursor.getColumnIndex(Telephony.Mms._ID)
+                val dateIdx = cursor.getColumnIndex(Telephony.Mms.DATE)
+                val msgBoxIdx = cursor.getColumnIndex(Telephony.Mms.MESSAGE_BOX)
+
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idIdx)
+                    var date = cursor.getLong(dateIdx)
+                    val msgBox = cursor.getInt(msgBoxIdx)
+
+                    if (date > 0 && date < 1000000000000L) date *= 1000
+
+                    val mmsMedia = getMmsMedia(id)
+                    val otherPartyAddress = if (msgBox == 1) getMmsAddress(id, 137) else getMmsAddress(id, 151)
+
+                    messages.add(
+                        Message(
+                            id = "mms_$id",
+                            address = otherPartyAddress ?: "Unknown",
+                            body = mmsMedia?.first ?: "",
+                            date = date,
+                            type = if (msgBox == 2) 2 else 1,
+                            isEncrypted = false,
+                            isMms = true,
+                            mediaUri = mmsMedia?.second,
+                            mediaContentType = mmsMedia?.third,
+                            senderAddress = if (msgBox == 1) getMmsAddress(id, 137) else null
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) { Log.e("SmsRepository", "Error querying MMS", e) }
+
+        // 3. Merge, Sort and Paginate
         val allSorted = messages.sortedByDescending { it.date }
-        
-        // Manual pagination
         val start = offset.coerceIn(0, allSorted.size)
         val end = (offset + limit).coerceIn(0, allSorted.size)
         

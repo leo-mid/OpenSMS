@@ -17,7 +17,7 @@ object MmsUtils {
     const val ACTION_MMS_SENT = "org.leotechs.opensms.MMS_SENT"
     const val ACTION_MMS_DOWNLOADED = "org.leotechs.opensms.MMS_DOWNLOADED"
 
-    fun sendMms(context: Context, phoneNumber: String, mediaUri: Uri?, bodyText: String? = null) {
+    fun sendMms(context: Context, phoneNumber: String, mediaUri: Uri?, bodyText: String? = null): Boolean {
         try {
             val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 context.getSystemService(SmsManager::class.java)
@@ -30,7 +30,13 @@ object MmsUtils {
             val sendReq = SendReq()
             
             // Handle multiple recipients
-            phoneNumber.split(",").map { it.trim() }.forEach { addr ->
+            val recipients = phoneNumber.split(",").map { it.trim() }.filter { it.isNotBlank() }
+            if (recipients.isEmpty()) {
+                Log.e(TAG, "No recipients provided for MMS")
+                return false
+            }
+            
+            recipients.forEach { addr ->
                 sendReq.addTo(EncodedStringValue(addr))
             }
             
@@ -41,7 +47,20 @@ object MmsUtils {
             sendReq.priority = PduHeaders.PRIORITY_NORMAL
             sendReq.date = System.currentTimeMillis() / 1000
             
-            if (bodyText != null) {
+            // Explicitly set message type and transaction ID
+            sendReq.messageType = PduHeaders.MESSAGE_TYPE_SEND_REQ
+            sendReq.mmsVersion = PduHeaders.CURRENT_MMS_VERSION
+            sendReq.transactionId = ("T" + System.currentTimeMillis().toString(16)).toByteArray()
+            
+            // For group chats, a subject is often REQUIRED for carriers to treat it as a group
+            if (recipients.size > 1) {
+                val subjectText = if (!bodyText.isNullOrBlank()) {
+                    if (bodyText.length > 30) bodyText.take(30) + "..." else bodyText
+                } else {
+                    "Group Message"
+                }
+                sendReq.subject = EncodedStringValue(subjectText)
+            } else if (bodyText != null) {
                 sendReq.subject = EncodedStringValue(bodyText)
             }
 
@@ -52,6 +71,9 @@ object MmsUtils {
                 val textPart = PduPart()
                 textPart.contentType = "text/plain".toByteArray()
                 textPart.data = bodyText.toByteArray()
+                textPart.contentId = "<text>".toByteArray()
+                textPart.contentLocation = "text.txt".toByteArray()
+                textPart.charset = CharacterSets.UTF_8
                 body.addPart(textPart)
             }
             
@@ -62,22 +84,29 @@ object MmsUtils {
                 part.contentType = contentType.toByteArray()
                 
                 val data = context.contentResolver.openInputStream(mediaUri)?.use { it.readBytes() }
-                if (data != null) {
-                    part.data = data
-                    part.contentLocation = "media".toByteArray()
-                    part.contentId = "<media>".toByteArray()
-                    body.addPart(part)
+                if (data == null) {
+                    Log.e(TAG, "Failed to read media data from $mediaUri")
+                    return false
                 }
+                part.data = data
+                part.contentLocation = "media".toByteArray()
+                part.contentId = "<media>".toByteArray()
+                body.addPart(part)
             }
             
             sendReq.body = body
 
             val composer = PduComposer(context, sendReq)
-            val pduBytes = composer.make()
+            val pduBytes = try {
+                composer.make()
+            } catch (e: Exception) {
+                Log.e(TAG, "PduComposer failed", e)
+                null
+            }
 
             if (pduBytes == null) {
-                Log.e(TAG, "Failed to compose PDU")
-                return
+                Log.e(TAG, "Failed to compose PDU (result was null)")
+                return false
             }
 
             // 2. Save PDU to a temporary file
@@ -92,8 +121,11 @@ object MmsUtils {
 
             // 3. Prepare PendingIntent for status
             val sentIntent = PendingIntent.getBroadcast(
-                context, 0, 
-                Intent(ACTION_MMS_SENT).apply { setPackage(context.packageName) }, 
+                context, phoneNumber.hashCode(), 
+                Intent(ACTION_MMS_SENT).apply { 
+                    setPackage(context.packageName)
+                    putExtra("address", phoneNumber)
+                }, 
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
 
@@ -103,9 +135,11 @@ object MmsUtils {
             smsManager.sendMultimediaMessage(context, pduUri, null, null, sentIntent)
             
             Log.d(TAG, "MMS sent request triggered for $phoneNumber with URI $pduUri")
+            return true
 
         } catch (e: Exception) {
             Log.e(TAG, "Error in sendMms", e)
+            return false
         }
     }
 

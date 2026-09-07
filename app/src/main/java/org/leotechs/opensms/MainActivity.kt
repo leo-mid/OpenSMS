@@ -190,13 +190,17 @@ class MainActivity : ComponentActivity() {
             val threadId = repository.getOrCreateThreadId(phoneNumber)
 
             // 1. Send via network
-            MmsUtils.sendMms(this, phoneNumber, uri, bodyText)
+            val triggered = MmsUtils.sendMms(this, phoneNumber, uri, bodyText)
             
-            // 2. Save to database
-            repository.saveSentMms(phoneNumber, uri, bodyText, threadId)
-            
-            Toast.makeText(this, "MMS Sending...", Toast.LENGTH_SHORT).show()
-            return true
+            if (triggered) {
+                // 2. Save to database
+                repository.saveSentMms(phoneNumber, uri, bodyText, threadId)
+                Toast.makeText(this, "MMS Sending...", Toast.LENGTH_SHORT).show()
+                return true
+            } else {
+                Toast.makeText(this, "Failed to initiate MMS sending. Check logs.", Toast.LENGTH_LONG).show()
+                return false
+            }
         } catch (e: Exception) {
             Log.e("MainActivity", "Failed to send MMS", e)
             Toast.makeText(this, "Failed to send MMS: ${e.message}", Toast.LENGTH_LONG).show()

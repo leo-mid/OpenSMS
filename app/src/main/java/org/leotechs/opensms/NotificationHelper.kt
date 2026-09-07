@@ -36,9 +36,17 @@ object NotificationHelper {
 
     fun showNotification(context: Context, threadId: Long, sender: String, messageBody: String) {
         val repository = SmsRepository(context)
+        val isGroup = repository.isGroupThread(threadId)
         val contactInfo = repository.getContactInfo(sender)
-        val name = contactInfo.first ?: sender
+        val senderName = contactInfo.first ?: sender
         val photoUri = contactInfo.second
+
+        val title = if (isGroup) {
+            val groupName = repository.getThreadName(threadId) ?: "Group Chat"
+            "$senderName in $groupName"
+        } else {
+            senderName
+        }
 
         // Create intent to open the app and the specific conversation
         val intent = Intent(context, MainActivity::class.java).apply {
@@ -55,7 +63,7 @@ object NotificationHelper {
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_dialog_info) // Use a proper icon later
-            .setContentTitle(name)
+            .setContentTitle(title)
             .setContentText(messageBody)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)

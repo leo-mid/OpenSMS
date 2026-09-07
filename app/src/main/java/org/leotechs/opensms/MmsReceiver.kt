@@ -26,15 +26,11 @@ class MmsReceiver : BroadcastReceiver() {
                     
                     Log.d("MmsReceiver", "MMS notification from $from, loc: $contentLocation")
                     
-                    val threadId = Telephony.Threads.getOrCreateThreadId(context, from)
-                    val uri = saveMmsNotification(context, pdu, threadId)
+                    val uri = saveMmsNotification(context, pdu)
                     
-                    if (AppState.currentThreadId != threadId) {
-                        NotificationHelper.showNotification(context, threadId, from, "You have a new MMS message")
-                    } else {
-                        SmsRepository(context).markAsRead(threadId)
-                        NotificationHelper.cancelNotification(context, threadId)
-                    }
+                    // Don't show notification for the raw NotificationInd, 
+                    // wait for the full message to be downloaded in MmsStatusReceiver
+                    Log.d("MmsReceiver", "Saved notification for $from, triggering download...")
                     
                     if (uri != null) {
                         val mmsId = uri.lastPathSegment ?: ""
@@ -47,12 +43,11 @@ class MmsReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun saveMmsNotification(context: Context, pdu: NotificationInd, threadId: Long): Uri? {
+    private fun saveMmsNotification(context: Context, pdu: NotificationInd): Uri? {
         val values = ContentValues().apply {
-            put(Telephony.Mms.THREAD_ID, threadId)
             put(Telephony.Mms.MESSAGE_BOX, Telephony.Mms.MESSAGE_BOX_INBOX)
             put(Telephony.Mms.DATE, System.currentTimeMillis() / 1000)
-            put(Telephony.Mms.READ, 0)
+            put(Telephony.Mms.READ, 1) // Set as read to avoid "ghost" unread indicators
             put(Telephony.Mms.MESSAGE_TYPE, 130) // m-notification-ind
             put(Telephony.Mms.CONTENT_LOCATION, pdu.contentLocation?.let { String(it) })
             put(Telephony.Mms.TRANSACTION_ID, pdu.transactionId?.let { String(it) })

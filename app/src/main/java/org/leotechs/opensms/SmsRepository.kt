@@ -603,6 +603,34 @@ class SmsRepository(private val context: Context) {
         }
     }
 
+    fun isGroupThread(threadId: Long): Boolean {
+        try {
+            val uri = Uri.parse("content://mms-sms/conversations?simple=true")
+            context.contentResolver.query(uri, arrayOf("recipient_ids"), "_id = ?", arrayOf(threadId.toString()), null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val recipientIds = cursor.getString(0) ?: ""
+                    return recipientIds.split(" ").size > 1
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("SmsRepository", "Error checking if group thread", e)
+        }
+        return false
+    }
+
+    fun getThreadName(threadId: Long): String? {
+        val addresses = getAddressesForThread(threadId)
+        if (addresses.isEmpty()) return null
+        
+        if (addresses.size == 1) {
+            return getContactInfo(addresses[0]).first ?: addresses[0]
+        }
+        
+        return addresses.map { addr ->
+            getContactInfo(addr).first ?: addr
+        }.joinToString(", ")
+    }
+
     fun saveSentSms(address: String, body: String, threadId: Long? = null) {
         val finalThreadId = threadId ?: getOrCreateThreadId(address)
         val values = ContentValues().apply {
@@ -727,12 +755,52 @@ class SmsRepository(private val context: Context) {
                 // Delete the old placeholder notification message
                 context.contentResolver.delete(Uri.parse("content://mms/$mmsId"), null, null)
                 Log.d("SmsRepository", "Successfully persisted received MMS to $uri and removed notification $mmsId")
+
+                // Show notification for the final persisted message
+                val threadId = getThreadIdFromUri(uri)
+                if (threadId != -1L) {
+                    val from = pdu.from?.getString() ?: "Unknown"
+                    val snippet = getMmsSnippet(pdu) ?: "New MMS message"
+                    
+                    if (AppState.currentThreadId != threadId) {
+                        NotificationHelper.showNotification(context, threadId, from, snippet)
+                    } else {
+                        markAsRead(threadId)
+                        NotificationHelper.cancelNotification(context, threadId)
+                    }
+                }
             } else {
                 Log.e("SmsRepository", "Failed to persist MMS using PduPersister")
             }
         } catch (e: Exception) {
             Log.e("SmsRepository", "Error saving received MMS", e)
         }
+    }
+
+    private fun getThreadIdFromUri(uri: Uri): Long {
+        return try {
+            context.contentResolver.query(uri, arrayOf("thread_id"), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    cursor.getLong(0)
+                } else -1L
+            } ?: -1L
+        } catch (e: Exception) {
+            -1L
+        }
+    }
+
+    private fun getMmsSnippet(pdu: RetrieveConf): String? {
+        val body = pdu.body
+        if (body != null) {
+            for (i in 0 until body.partsNum) {
+                val part = body.getPart(i)
+                val ct = String(part.contentType)
+                if (ct == "text/plain") {
+                    return part.data?.let { String(it) }
+                }
+            }
+        }
+        return null
     }
 
     fun markAsRead(threadId: Long) {

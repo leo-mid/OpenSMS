@@ -28,33 +28,51 @@ import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import java.io.File
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun NewConversationScreen(
     onBack: () -> Unit,
     onMessageSent: (Long, String) -> Unit,
     onSendSms: (String, String, Boolean) -> Boolean,
-    onSendMms: (String, Uri) -> Boolean,
+    onSendMms: (String, Uri?) -> Boolean,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val repository = remember { SmsRepository(context) }
-    var recipient by remember { mutableStateOf("") }
+    var recipientInput by remember { mutableStateOf("") }
     var messageText by remember { mutableStateOf("") }
     var contacts by remember { mutableStateOf<List<Contact>>(emptyList()) }
-    var selectedContact by remember { mutableStateOf<Contact?>(null) }
+    val selectedRecipients = remember { mutableStateListOf<Contact>() }
 
     // Media Handling
     var tempImageUri by remember { mutableStateOf<Uri?>(null) }
+    
+    val sendAction = { uri: Uri?, text: String? ->
+        val numbers = selectedRecipients.map { it.number }.toMutableList()
+        if (recipientInput.isNotBlank() && !numbers.contains(recipientInput)) {
+            numbers.add(recipientInput)
+        }
+        
+        if (numbers.isNotEmpty()) {
+            val targetNumbers = numbers.joinToString(", ")
+            val success = if (uri != null) {
+                onSendMms(targetNumbers, uri)
+            } else if (text != null) {
+                onSendSms(targetNumbers, text, false)
+            } else false
+
+            if (success) {
+                val threadId = repository.getOrCreateThreadId(targetNumbers)
+                onMessageSent(threadId, targetNumbers)
+            }
+        }
+    }
+
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success && tempImageUri != null) {
-            val targetNumber = selectedContact?.number ?: recipient
-            if (targetNumber.isNotBlank() && onSendMms(targetNumber, tempImageUri!!)) {
-                val threadId = repository.getOrCreateThreadId(targetNumber)
-                onMessageSent(threadId, targetNumber)
-            }
+            sendAction(tempImageUri, null)
         }
     }
 
@@ -62,11 +80,7 @@ fun NewConversationScreen(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
-            val targetNumber = selectedContact?.number ?: recipient
-            if (targetNumber.isNotBlank() && onSendMms(targetNumber, uri)) {
-                val threadId = repository.getOrCreateThreadId(targetNumber)
-                onMessageSent(threadId, targetNumber)
-            }
+            sendAction(uri, null)
         }
     }
 
@@ -81,10 +95,8 @@ fun NewConversationScreen(
 
     BackHandler(onBack = onBack)
 
-    LaunchedEffect(recipient) {
-        if (selectedContact == null) {
-            contacts = repository.searchContacts(recipient)
-        }
+    LaunchedEffect(recipientInput) {
+        contacts = repository.searchContacts(recipientInput)
     }
 
     Scaffold(
@@ -102,26 +114,44 @@ fun NewConversationScreen(
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).fillMaxSize().imePadding()) {
             Column(modifier = Modifier.padding(16.dp).weight(1f)) {
+                // Selected people removal
+                if (selectedRecipients.isNotEmpty()) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        selectedRecipients.forEach { contact ->
+                            InputChip(
+                                selected = true,
+                                onClick = { selectedRecipients.remove(contact) },
+                                label = { Text(contact.name) },
+                                trailingIcon = {
+                                    Icon(Icons.Default.Close, contentDescription = "Remove", modifier = Modifier.size(18.dp))
+                                }
+                            )
+                        }
+                    }
+                }
+
                 OutlinedTextField(
-                    value = if (selectedContact != null) selectedContact!!.name else recipient,
+                    value = recipientInput,
                     onValueChange = {
-                        recipient = it
-                        selectedContact = null
+                        recipientInput = it
                     },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("To") },
                     placeholder = { Text("Type name or number") },
                     singleLine = true,
                     trailingIcon = {
-                        if (selectedContact != null || recipient.isNotEmpty()) {
-                            IconButton(onClick = { selectedContact = null; recipient = "" }) {
+                        if (recipientInput.isNotEmpty()) {
+                            IconButton(onClick = { recipientInput = "" }) {
                                 Icon(Icons.Default.Close, contentDescription = "Clear")
                             }
                         }
                     }
                 )
 
-                if (selectedContact == null && contacts.isNotEmpty()) {
+                if (contacts.isNotEmpty()) {
                     Card(
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -129,7 +159,10 @@ fun NewConversationScreen(
                         LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)) {
                             items(contacts) { contact ->
                                 ContactItem(contact) {
-                                    selectedContact = contact
+                                    if (!selectedRecipients.any { it.number == contact.number }) {
+                                        selectedRecipients.add(contact)
+                                    }
+                                    recipientInput = ""
                                     contacts = emptyList()
                                 }
                             }
@@ -183,12 +216,8 @@ fun NewConversationScreen(
                 )
 
                 Button(onClick = {
-                    val targetNumber = selectedContact?.number ?: recipient
-                    if (targetNumber.isNotBlank() && messageText.isNotBlank()) {
-                        if (onSendSms(targetNumber, messageText, false)) {
-                            val threadId = repository.getOrCreateThreadId(targetNumber)
-                            onMessageSent(threadId, targetNumber)
-                        }
+                    if (messageText.isNotBlank()) {
+                        sendAction(null, messageText)
                     }
                 }) {
                     Text("Send")

@@ -122,13 +122,13 @@ fun ConversationList(
                                         .graphicsLayer {
                                             alpha = if (conversationSwipeActions.progress > 0f) 1f else 0f
                                         }
-                                        .background(Color(0xff3b719f))
+                                        .background(MaterialTheme.colorScheme.primaryContainer)
                                         .padding(horizontal = 20.dp),
                                     contentAlignment = Alignment.CenterStart
                                 ) {
                                     Text(
                                         text = if (conversation.isRead) "Mark as Unread" else "Mark as Read",
-                                        color = Color(0xFFA4D5FF),
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier.graphicsLayer {
                                             alpha = if (conversationSwipeActions.progress > 0.4f) 1f else 0f
@@ -141,13 +141,13 @@ fun ConversationList(
                                         .graphicsLayer {
                                             alpha = if (conversationSwipeActions.progress > 0f) 1f else 0f
                                         }
-                                        .background(Color(0xFF8C1212))
+                                        .background(MaterialTheme.colorScheme.errorContainer)
                                         .padding(horizontal = 20.dp),
                                     contentAlignment = Alignment.CenterEnd
                                 ){
                                     Text(
                                         text = "Delete",
-                                        color = Color(0xFFFF7A7A),
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier.graphicsLayer {
                                             alpha = if (conversationSwipeActions.progress > 0.4f) 1f else 0f
@@ -221,7 +221,7 @@ fun ConversationItem(conversation: Conversation, onClick: () -> Unit) {
                         modifier = Modifier
                             .size(10.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF007AFF))
+                            .background(MaterialTheme.colorScheme.primary)
                     )
                 } else {
                     Spacer(modifier = Modifier.size(10.dp))
@@ -268,7 +268,7 @@ fun ConversationItem(conversation: Conversation, onClick: () -> Unit) {
             }
         },
         trailingContent = {
-            Text(text = dateString, color = Color.Gray)
+            Text(text = dateString, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     )
 }
@@ -628,7 +628,7 @@ fun MessageItem(message: Message, isGroup: Boolean = false) {
                 Text(
                     text = senderInfo.first ?: message.senderAddress,
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.Gray,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 12.dp, bottom = 2.dp)
                 )
             }
@@ -638,7 +638,10 @@ fun MessageItem(message: Message, isGroup: Boolean = false) {
                 modifier = Modifier
                     .padding(vertical = 4.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(if (isSent) Color(0xFF007AFF) else Color(0xFFE9E9EB))
+                    .background(
+                        if (isSent) MaterialTheme.colorScheme.primary 
+                        else MaterialTheme.colorScheme.secondaryContainer
+                    )
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 // Checks if the message has an attachment and handles it to display it in the correct way
@@ -685,7 +688,8 @@ fun MessageItem(message: Message, isGroup: Boolean = false) {
                     if (message.body.isNotEmpty()) {
                         Text(
                             text = message.body,
-                            color = if (isSent) Color.White else Color.Black
+                            color = if (isSent) MaterialTheme.colorScheme.onPrimary 
+                                    else MaterialTheme.colorScheme.onSecondaryContainer
                         )
                     }
                 }

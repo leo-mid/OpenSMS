@@ -20,7 +20,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -242,10 +241,16 @@ fun ContactItem(contact: Contact, onClick: () -> Unit) {
                 )
             } else {
                 Box(
-                    modifier = Modifier.size(40.dp).clip(CircleShape).background(Color.Gray),
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.secondaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(contact.name.take(1).uppercase(), color = Color.White)
+                    Text(
+                        text = contact.name.take(1).uppercase(),
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
                 }
             }
         }

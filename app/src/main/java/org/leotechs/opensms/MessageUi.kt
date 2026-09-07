@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -249,20 +250,14 @@ fun ConversationItem(conversation: Conversation, onClick: () -> Unit) {
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
-                            .background(Color.Gray),
+                            .background(MaterialTheme.colorScheme.secondaryContainer),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (conversation.contactName != null) {
-                            Text(
-                                text = conversation.contactName.take(1).uppercase(),
-                                color = Color.White
-                            )
-                        } else {
-                            Text(
-                                text = "?",
-                                color = Color.White
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.AccountCircle,
+                            contentDescription = "AccountCircle",
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
                     }
                 }
             }
@@ -528,7 +523,7 @@ fun MessageItem(message: Message, isGroup: Boolean = false) {
             text = {
                 if (message.mediaContentType?.startsWith("video/") == true) {
                     VideoPlayer(
-                        uri = message.mediaUri!!,
+                        uri = message.mediaUri,
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(16f / 9f)

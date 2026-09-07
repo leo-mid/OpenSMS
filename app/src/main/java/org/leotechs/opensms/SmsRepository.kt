@@ -177,33 +177,39 @@ class SmsRepository(private val context: Context) {
         return null
     }
 
-    private fun getMmsAddress(mmsId: Long, type: Int = 137): String? {
+    private fun getMmsAddress(mmsId: Long, type: Int? = null): String? {
         val uri = Uri.parse("content://mms/$mmsId/addr")
-        val cursor = context.contentResolver.query(uri, null, "type = ?", arrayOf(type.toString()), null)
+        val selection = if (type != null) "type = ?" else null
+        val selectionArgs = if (type != null) arrayOf(type.toString()) else null
+        
+        val cursor = context.contentResolver.query(uri, null, selection, selectionArgs, null)
         cursor?.use {
             val addrIdx = it.getColumnIndex("address")
-            if (addrIdx != -1 && it.moveToFirst()) {
-                val address = it.getString(addrIdx)
-                if (address != null && address != "insert-address-token") {
-                    return address
+            if (addrIdx != -1) {
+                while (it.moveToNext()) {
+                    val address = it.getString(addrIdx)
+                    if (address != null && address != "insert-address-token") {
+                        return address
+                    }
                 }
             }
         }
         return null
     }
 
-    fun getMessages(threadId: Long): List<Message> {
+    fun getMessages(threadId: Long, limit: Int = 30, offset: Int = 0): List<Message> {
         val messages = mutableListOf<Message>()
         
-        // Use unified view for ordering but fetch details manually if needed
         try {
             val uri = Uri.parse("content://mms-sms/conversations/$threadId")
+            // Fetch ALL messages for the thread. We slice in Kotlin to handle inconsistent date formats (ms vs sec)
+            // that cause SQL LIMIT/OFFSET to fail when sorting DESC.
             val cursor = context.contentResolver.query(
                 uri,
                 null,
                 null,
                 null,
-                "date ASC"
+                "date DESC"
             )
 
             cursor?.use {
@@ -219,13 +225,16 @@ class SmsRepository(private val context: Context) {
 
                 while (it.moveToNext()) {
                     val id = if (idIdx != -1) it.getLong(idIdx) else 0
-                    val date = if (dateIdx != -1) it.getLong(dateIdx) else 0
+                    var date = if (dateIdx != -1) it.getLong(dateIdx) else 0
                     val address = if (addressIdx != -1) it.getString(addressIdx) ?: "" else ""
                     
                     val contentType = if (ctIndex != -1) it.getString(ctIndex) else null
                     val transport = if (transportIdx != -1) it.getString(transportIdx) else null
                     val mType = if (mTypeIdx != -1) it.getInt(mTypeIdx) else -1
                     val bodyText = if (bodyIdx != -1) it.getString(bodyIdx) else null
+
+                    // Normalize date: seconds to milliseconds
+                    if (date > 0 && date < 1000000000000L) date *= 1000
 
                     // Broadened MMS detection logic
                     val isMms = (contentType != null && contentType.contains("multipart")) || 
@@ -236,20 +245,28 @@ class SmsRepository(private val context: Context) {
                     if (isMms) {
                         val msgBox = if (msgBoxIdx != -1) it.getInt(msgBoxIdx) else 1
                         val mmsMedia = getMmsMedia(id)
-                        val sender = if (msgBox == 2) null else getMmsAddress(id, 137)
                         
+                        // For MMS, we need to find the "other party" address.
+                        // In an incoming message, it's the FROM address (137).
+                        // In an outgoing message, it's the TO address (151).
+                        val otherPartyAddress = if (msgBox == 1) {
+                            getMmsAddress(id, 137)
+                        } else {
+                            getMmsAddress(id, 151)
+                        }
+
                         messages.add(
                             Message(
-                                id = id,
-                                address = if (address.isEmpty()) (getMmsAddress(id, 151) ?: "") else address,
+                                id = "mms_$id",
+                                address = otherPartyAddress ?: address,
                                 body = mmsMedia?.first ?: "",
-                                date = if (date > 0 && date < 1000000000000L) date * 1000 else date, // Handle sec vs ms
+                                date = date,
                                 type = if (msgBox == 2) 2 else 1,
                                 isEncrypted = false,
                                 isMms = true,
                                 mediaUri = mmsMedia?.second,
                                 mediaContentType = mmsMedia?.third,
-                                senderAddress = sender
+                                senderAddress = if (msgBox == 1) getMmsAddress(id, 137) else null
                             )
                         )
                     } else {
@@ -263,10 +280,10 @@ class SmsRepository(private val context: Context) {
 
                         messages.add(
                             Message(
-                                id = id,
+                                id = "sms_$id",
                                 address = address,
                                 body = displayBody,
-                                date = if (date > 0 && date < 1000000000000L) date * 1000 else date,
+                                date = date,
                                 type = if (typeIdx != -1) it.getInt(typeIdx) else 1,
                                 isEncrypted = isEncrypted,
                                 isMms = false,
@@ -279,7 +296,15 @@ class SmsRepository(private val context: Context) {
         } catch (e: Exception) {
             Log.e("SmsRepository", "Error querying unified messages", e)
         }
-        return messages.sortedBy { it.date }
+        
+        // Sort the entire unified set by normalized date
+        val allSorted = messages.sortedByDescending { it.date }
+        
+        // Manual pagination
+        val start = offset.coerceIn(0, allSorted.size)
+        val end = (offset + limit).coerceIn(0, allSorted.size)
+        
+        return allSorted.subList(start, end)
     }
 
     private fun getMmsMedia(mmsId: Long): Triple<String?, Uri?, String?>? {

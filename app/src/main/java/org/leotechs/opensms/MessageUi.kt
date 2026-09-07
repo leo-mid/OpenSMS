@@ -43,6 +43,9 @@ import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.decode.VideoFrameDecoder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.leotechs.opensms.ui.theme.OpenSMSTheme
 import java.io.File
 import java.text.SimpleDateFormat
@@ -318,6 +321,10 @@ fun MessageDetail(
     val messages = remember { mutableStateListOf<Message>() }
     var phoneNumber by remember { mutableStateOf("") }
     var messageText by remember { mutableStateOf("") }
+    var page by remember { mutableStateOf(0) }
+    var canLoadMore by remember { mutableStateOf(true) }
+    var isLoading by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     // Media Handling
     var tempImageUri by remember { mutableStateOf<Uri?>(null) }
@@ -352,24 +359,59 @@ fun MessageDetail(
 
     BackHandler(onBack = onBack)
 
-    fun refreshMessages() {
-        val msgs = repository.getMessages(threadId)
-        messages.clear()
-        messages.addAll(msgs)
+    fun loadMessages(isRefresh: Boolean = false) {
+        if (isLoading) return
+        if (!isRefresh && !canLoadMore) return
         
-        // Get all addresses for the conversation
-        val addresses = repository.getAddressesForThread(threadId)
-        phoneNumber = addresses.joinToString(", ")
+        scope.launch(Dispatchers.IO) {
+            isLoading = true
+            if (isRefresh) {
+                page = 0
+                canLoadMore = true
+            }
+
+            val newMsgs = repository.getMessages(threadId, limit = 30, offset = page * 30)
+            
+            withContext(Dispatchers.Main) {
+                if (isRefresh) {
+                    messages.clear()
+                }
+                
+                if (newMsgs.size < 30) {
+                    canLoadMore = false
+                }
+
+                // Add only messages not already in the list to avoid duplicates
+                val existingIds = messages.map { it.id }.toSet()
+                val uniqueNewMsgs = newMsgs.filter { !existingIds.contains(it.id) }
+                messages.addAll(uniqueNewMsgs)
+                
+                // Sort newest to oldest so index 0 is at the bottom with reverseLayout
+                messages.sortByDescending { it.date }
+                
+                if (uniqueNewMsgs.isNotEmpty()) {
+                    page++
+                }
+
+                // Get all addresses for the conversation if not already set
+                if (phoneNumber.isEmpty()) {
+                    val addresses = repository.getAddressesForThread(threadId)
+                    phoneNumber = addresses.joinToString(", ")
+                }
+                isLoading = false
+            }
+        }
     }
 
     LaunchedEffect(threadId) {
-        refreshMessages()
+        loadMessages(isRefresh = true)
     }
 
     DisposableEffect(threadId) {
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
-                refreshMessages()
+                // When content changes, refresh to get the latest messages
+                loadMessages(isRefresh = true)
             }
         }
         context.contentResolver.registerContentObserver(
@@ -410,32 +452,29 @@ fun MessageDetail(
             }
 
             val listState = rememberLazyListState()
-            
-            // Auto-scroll when messages arrive
-            LaunchedEffect(messages.size) {
-                if (messages.isNotEmpty()) {
-                    listState.animateScrollToItem(messages.size - 1)
-                }
-            }
 
-            // Auto-scroll when keyboard height changes
-            val imeBottom = WindowInsets.ime.getBottom(density)
-            LaunchedEffect(imeBottom) {
-                if (imeBottom > 0 && messages.isNotEmpty()) {
-                    listState.animateScrollToItem(messages.size - 1)
-                }
+            // Load more when reaching the end (top of the list in reverse layout)
+            LaunchedEffect(listState) {
+                snapshotFlow { listState.firstVisibleItemIndex }
+                    .collect { index ->
+                        if (messages.isNotEmpty() && 
+                            index + listState.layoutInfo.visibleItemsInfo.size >= messages.size - 5) {
+                            loadMessages()
+                        }
+                    }
             }
 
             LazyColumn(
                 state = listState,
+                reverseLayout = true,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 16.dp)
             ) {
                 val isGroup = phoneNumber.contains(",")
-                items(messages) { message ->
+                items(messages, key = { it.id }) { message ->
                     MessageItem(message, isGroup)
-                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
 

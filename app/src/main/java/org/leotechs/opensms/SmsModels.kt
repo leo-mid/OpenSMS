@@ -16,7 +16,7 @@ data class Conversation(
 )
 
 data class Message(
-    val id: Long,
+    val id: String,
     val address: String,
     val body: String,
     val date: Long,

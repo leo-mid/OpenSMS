@@ -731,4 +731,13 @@ class SmsRepository(private val context: Context) {
             Log.e("SmsRepository", "Error deleting conversation:" + e.message)
         }
     }
+
+    fun getContactsForThread(threadId: Long): MutableList<Pair<String?, String?>> {
+        val people = getAddressesForThread(threadId)
+        val contact = mutableListOf<Pair<String?, String?>>()
+        people.forEach {
+            contact.add(getContactInfo(it))
+        }
+        return contact
+    }
 }

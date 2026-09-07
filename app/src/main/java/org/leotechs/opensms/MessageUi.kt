@@ -1,7 +1,6 @@
 package org.leotechs.opensms
 
 import android.Manifest
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.database.ContentObserver
@@ -9,7 +8,6 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -45,7 +43,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
@@ -526,8 +523,83 @@ fun MessageDetail(
                     }
                 }
 
-                IconButton(onClick = { /*TODO*/ }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "More Options")
+                Box{
+                    var menuExpanded by remember { mutableStateOf(false) }
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "More Options")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        // Ex: Unknwon numbers messaging you options (non-group)
+                        if (!isGroup && contactName == null){
+                            DropdownMenuItem(
+                                text = { Text("Add to Contacts") },
+                                onClick = {
+                                    menuExpanded = false
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = { Text("Send Encrypted SMS") },
+                                onClick = {
+                                    menuExpanded = false
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = { Text("Block Number") },
+                                onClick = {
+                                    menuExpanded = false
+                                }
+                            )
+                        } else if (!isGroup){ // Ex: Someone saved in your phone (non-group)
+                            DropdownMenuItem(
+                                text = { Text("Edit Contact") },
+                                onClick = {
+                                    menuExpanded = false
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = { Text("Send Encrypted SMS") },
+                                onClick = {
+                                    menuExpanded = false
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = { Text("Block Number") },
+                                onClick = {
+                                    menuExpanded = false
+                                }
+                            )
+                        } else { // Ex: Group conversation
+                            DropdownMenuItem(
+                                text = { Text("Send Encrypted SMS") },
+                                onClick = {
+                                    menuExpanded = false
+                                }
+                            )
+
+                            Text(
+                                "Members",
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                            )
+
+                            HorizontalDivider()
+
+                            for (contact in repository.getContactsForThread(threadId)) {
+                                DropdownMenuItem(
+                                    text = { (contact.first ?: contact.second)?.let { Text(it) } },
+                                    onClick = {
+                                        menuExpanded = false
+                                    })
+                            }
+                        }
+                    }
                 }
             }
 
@@ -569,7 +641,6 @@ fun MessageDetail(
 
             // Send bar information
             // Creates the icon for the media, text field for the messages, and the send button
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

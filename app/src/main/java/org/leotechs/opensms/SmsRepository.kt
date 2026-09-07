@@ -8,6 +8,7 @@ import android.provider.Telephony
 import android.util.Log
 import com.google.android.mms.pdu_alt.*
 import kotlin.math.abs
+import androidx.core.net.toUri
 
 class SmsRepository(private val context: Context) {
 
@@ -688,6 +689,18 @@ class SmsRepository(private val context: Context) {
             Log.d("SmsRepository", "Updated read status to $isRead for thread $threadId. SMS: $smsCount, MMS: $mmsCount")
         } catch (e: Exception) {
             Log.e("SmsRepository", "Error setting thread $threadId read status to $isRead", e)
+        }
+    }
+
+    fun deleteConversation(threadId: Long) {
+        try {
+            context.contentResolver.delete(
+                "content://mms-sms/conversations/$threadId".toUri(),
+                null,
+                null
+            )
+        } catch (e: Exception) {
+            Log.e("SmsRepository", "Error deleting conversation:" + e.message)
         }
     }
 }

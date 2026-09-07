@@ -32,6 +32,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -63,6 +64,7 @@ fun ConversationList(
             Text(
                 text = "Messages",
                 style = MaterialTheme.typography.headlineLarge,
+                textAlign = TextAlign.Center,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(16.dp)
             )
@@ -96,6 +98,50 @@ fun ConversationList(
                         },
                         positionalThreshold = { totalDistance -> totalDistance * 0.8f }
                     )
+
+                    val deleteState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            if (value == SwipeToDismissBoxValue.EndToStart) {
+                                viewModel.deleteConversation(conversation.threadId)
+                                false
+                            } else {
+                                false
+                            }
+                        }
+                    )
+
+                    // Swipe to delete a conversation - Right to left
+                    SwipeToDismissBox(
+                        state = deleteState,
+                        enableDismissFromStartToEnd =  false,
+                        enableDismissFromEndToStart = true,
+                        backgroundContent = {
+                            Box(
+                                Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer {
+                                        alpha = if (dismissState.progress > 0f) 1f else 0f
+                                    }
+                                    .background(Color(0xFF8C1212))
+                                    .padding(horizontal = 20.dp),
+                                contentAlignment = Alignment.CenterEnd
+                            ){
+                                Text(
+                                    text = "Delete",
+                                    color = Color(0xFFFF7A7A),
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.graphicsLayer {
+                                        alpha = if (dismissState.progress > 0.4f) 1f else 0f
+                                    }
+                                )
+                            }
+                        }
+                    ) {
+                        ConversationItem(conversation) {
+                            onConversationClick(conversation.threadId, conversation.contactName)
+                        }
+                    }
+
                     // Handles the marking as read/unread swipe controls
                     SwipeToDismissBox(
                         state = dismissState,
@@ -111,13 +157,13 @@ fun ConversationList(
                                     .graphicsLayer {
                                         alpha = if (dismissState.progress > 0f) 1f else 0f
                                     }
-                                    .background(Color(0xFFBBDEFB))
+                                    .background(Color(0xff3b719f))
                                     .padding(horizontal = 20.dp),
                                 contentAlignment = Alignment.CenterStart
                             ) {
                                 Text(
                                     text = if (conversation.isRead) "Mark as Unread" else "Mark as Read",
-                                    color = Color(0xFF01579B),
+                                    color = Color(0xFFA4D5FF),
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.graphicsLayer {
                                         alpha = if (dismissState.progress > 0.4f) 1f else 0f

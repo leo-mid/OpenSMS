@@ -62,6 +62,14 @@ class ConversationViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    fun deleteConversation(threadId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteConversation(threadId)
+            Log.d("ConversationViewModel", "Conversation deleted, refreshing...")
+            refresh()
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         getApplication<Application>().contentResolver.unregisterContentObserver(observer)

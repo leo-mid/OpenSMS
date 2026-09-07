@@ -35,6 +35,7 @@ The app needs the following permissions to function:
 * Camera (optional)
 * Contacts (optional)
 * Photo Gallery (optional)
+* Call Phone (optional)
 
 ## How to Install
 ### Method 1: APK

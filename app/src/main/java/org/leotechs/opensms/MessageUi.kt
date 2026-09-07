@@ -1,10 +1,15 @@
 package org.leotechs.opensms
 
+import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -40,6 +45,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -122,7 +129,8 @@ fun ConversationList(
                                     Modifier
                                         .fillMaxSize()
                                         .graphicsLayer {
-                                            alpha = if (conversationSwipeActions.progress > 0f) 1f else 0f
+                                            alpha =
+                                                if (conversationSwipeActions.progress > 0f) 1f else 0f
                                         }
                                         .background(MaterialTheme.colorScheme.primaryContainer)
                                         .padding(horizontal = 20.dp),
@@ -141,7 +149,8 @@ fun ConversationList(
                                     Modifier
                                         .fillMaxSize()
                                         .graphicsLayer {
-                                            alpha = if (conversationSwipeActions.progress > 0f) 1f else 0f
+                                            alpha =
+                                                if (conversationSwipeActions.progress > 0f) 1f else 0f
                                         }
                                         .background(MaterialTheme.colorScheme.errorContainer)
                                         .padding(horizontal = 20.dp),
@@ -455,6 +464,18 @@ fun MessageDetail(
     BoxWithConstraints(modifier = modifier) {
         val density = LocalDensity.current
         val maxHeight = maxHeight / 2
+        val context = LocalContext.current
+
+        val callPermissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission()
+        ) { granted ->
+            if (granted) {
+                val intent = Intent(Intent.ACTION_CALL).apply {
+                    data = "tel:$phoneNumber".toUri()
+                }
+                context.startActivity(intent)
+            }
+        }
 
         Column(
             modifier = Modifier
@@ -481,8 +502,27 @@ fun MessageDetail(
                 Spacer(modifier = Modifier.weight(1f))
 
                 if (!isGroup){
-                    IconButton(onClick = { /*TODO*/ }) {
-                        Icon(Icons.Filled.Call, contentDescription = "Make Call")
+                    IconButton(
+                        onClick = {
+                            if (
+                                ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.CALL_PHONE
+                                ) == PackageManager.PERMISSION_GRANTED
+                            ) {
+                                val intent = Intent(Intent.ACTION_CALL).apply {
+                                    data = "tel:$phoneNumber".toUri()
+                                }
+                                context.startActivity(intent)
+                            } else {
+                                callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Call,
+                            contentDescription = "Call"
+                        )
                     }
                 }
 
@@ -654,7 +694,7 @@ fun MessageItem(message: Message, isGroup: Boolean = false) {
                     .padding(vertical = 4.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(
-                        if (isSent) MaterialTheme.colorScheme.primary 
+                        if (isSent) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.secondaryContainer
                     )
                     .padding(horizontal = 16.dp, vertical = 8.dp)

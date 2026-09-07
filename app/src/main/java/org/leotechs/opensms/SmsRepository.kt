@@ -73,20 +73,32 @@ class SmsRepository(private val context: Context) {
                         }
 
                         // Optimization: Get address from cache or pre-loaded canonical addresses
-                        val address = addressCache.getOrPut(threadId) {
-                            val recipientIds = it.getString(recipientIdsIdx) ?: ""
-                            if (recipientIds.isNotEmpty()) {
-                                val ids = recipientIds.split(" ")
-                                if (ids.isNotEmpty()) {
-                                    canonicalAddressCache[ids[0].toLongOrNull() ?: -1L] ?: "Unknown"
-                                } else "Unknown"
-                            } else "Unknown"
+                        val addresses = recipientIdsIdx.let { idx ->
+                            val idsStr = it.getString(idx) ?: ""
+                            if (idsStr.isNotEmpty()) {
+                                idsStr.split(" ").mapNotNull { idStr ->
+                                    canonicalAddressCache[idStr.toLongOrNull() ?: -1L]
+                                }
+                            } else emptyList()
                         }
+                        
+                        val isGroup = addresses.size > 1
+                        val displayAddress = addresses.joinToString(", ")
 
                         // Optimization: Use contact cache to avoid repeated ContactsContract queries
-                        val contactInfo = contactCache.getOrPut(address) {
-                            getContactInfo(address)
+                        val contactInfos = addresses.map { addr ->
+                            contactCache.getOrPut(addr) {
+                                getContactInfo(addr)
+                            }
                         }
+
+                        val contactName = if (isGroup) {
+                            contactInfos.map { it.first ?: it.second ?: "Unknown" }.joinToString(", ")
+                        } else {
+                            contactInfos.firstOrNull()?.first
+                        }
+                        
+                        val contactPhotoUri = if (isGroup) null else contactInfos.firstOrNull()?.second
 
                         val isEncrypted = snippet.startsWith("[ENC]")
                         val displaySnippet = if (isEncrypted) {
@@ -102,13 +114,15 @@ class SmsRepository(private val context: Context) {
                         conversations.add(
                             Conversation(
                                 threadId = threadId,
-                                address = address,
+                                address = displayAddress,
                                 snippet = displaySnippet,
                                 date = date,
-                                contactName = contactInfo.first,
-                                contactPhotoUri = contactInfo.second,
+                                contactName = contactName,
+                                contactPhotoUri = contactPhotoUri,
                                 isEncrypted = isEncrypted,
-                                isRead = isRead
+                                isRead = isRead,
+                                isGroup = isGroup,
+                                addresses = addresses
                             )
                         )
                     } catch (e: Exception) {
@@ -163,17 +177,15 @@ class SmsRepository(private val context: Context) {
         return null
     }
 
-    private fun getMmsAddress(mmsId: Long): String? {
+    private fun getMmsAddress(mmsId: Long, type: Int = 137): String? {
         val uri = Uri.parse("content://mms/$mmsId/addr")
-        val cursor = context.contentResolver.query(uri, null, null, null, null)
+        val cursor = context.contentResolver.query(uri, null, "type = ?", arrayOf(type.toString()), null)
         cursor?.use {
             val addrIdx = it.getColumnIndex("address")
-            if (addrIdx != -1) {
-                while (it.moveToNext()) {
-                    val address = it.getString(addrIdx)
-                    if (address != null && address != "insert-address-token") {
-                        return address
-                    }
+            if (addrIdx != -1 && it.moveToFirst()) {
+                val address = it.getString(addrIdx)
+                if (address != null && address != "insert-address-token") {
+                    return address
                 }
             }
         }
@@ -224,18 +236,20 @@ class SmsRepository(private val context: Context) {
                     if (isMms) {
                         val msgBox = if (msgBoxIdx != -1) it.getInt(msgBoxIdx) else 1
                         val mmsMedia = getMmsMedia(id)
+                        val sender = if (msgBox == 2) null else getMmsAddress(id, 137)
                         
                         messages.add(
                             Message(
                                 id = id,
-                                address = if (address.isEmpty()) getMmsAddress(id) ?: "" else address,
+                                address = if (address.isEmpty()) (getMmsAddress(id, 151) ?: "") else address,
                                 body = mmsMedia?.first ?: "",
                                 date = if (date > 0 && date < 1000000000000L) date * 1000 else date, // Handle sec vs ms
                                 type = if (msgBox == 2) 2 else 1,
                                 isEncrypted = false,
                                 isMms = true,
                                 mediaUri = mmsMedia?.second,
-                                mediaContentType = mmsMedia?.third
+                                mediaContentType = mmsMedia?.third,
+                                senderAddress = sender
                             )
                         )
                     } else {
@@ -255,7 +269,8 @@ class SmsRepository(private val context: Context) {
                                 date = if (date > 0 && date < 1000000000000L) date * 1000 else date,
                                 type = if (typeIdx != -1) it.getInt(typeIdx) else 1,
                                 isEncrypted = isEncrypted,
-                                isMms = false
+                                isMms = false,
+                                senderAddress = if ((if (typeIdx != -1) it.getInt(typeIdx) else 1) == 2) null else address
                             )
                         )
                     }
@@ -531,9 +546,32 @@ class SmsRepository(private val context: Context) {
         return Pair(null, null)
     }
 
+    fun getAddressesForThread(threadId: Long): List<String> {
+        val addresses = mutableListOf<String>()
+        try {
+            val projection = arrayOf("recipient_ids")
+            val uri = Uri.parse("content://mms-sms/conversations?simple=true")
+            context.contentResolver.query(uri, projection, "_id = ?", arrayOf(threadId.toString()), null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val recipientIds = cursor.getString(0) ?: ""
+                    if (recipientIds.isNotEmpty()) {
+                        loadCanonicalAddresses()
+                        recipientIds.split(" ").forEach { idStr ->
+                            canonicalAddressCache[idStr.toLongOrNull() ?: -1L]?.let { addresses.add(it) }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("SmsRepository", "Error getting addresses for thread $threadId", e)
+        }
+        return addresses
+    }
+
     fun getOrCreateThreadId(address: String): Long {
         return try {
-            Telephony.Threads.getOrCreateThreadId(context, address)
+            val addresses = address.split(",").map { it.trim() }.toSet()
+            Telephony.Threads.getOrCreateThreadId(context, addresses)
         } catch (e: Exception) {
             Log.e("SmsRepository", "Error getting/creating thread ID", e)
             0L
@@ -572,7 +610,7 @@ class SmsRepository(private val context: Context) {
         }
     }
 
-    fun saveSentMms(address: String, mediaUri: Uri, threadId: Long? = null) {
+    fun saveSentMms(address: String, mediaUri: Uri?, bodyText: String? = null, threadId: Long? = null) {
         try {
             val finalThreadId = threadId ?: getOrCreateThreadId(address)
 
@@ -584,6 +622,9 @@ class SmsRepository(private val context: Context) {
                 put(Telephony.Mms.READ, 1)
                 put(Telephony.Mms.MESSAGE_TYPE, 128) // m-send-req
                 put(Telephony.Mms.CONTENT_TYPE, "application/vnd.wap.multipart.related")
+                if (bodyText != null) {
+                    put(Telephony.Mms.SUBJECT, bodyText)
+                }
             }
             val mmsUri = context.contentResolver.insert(Telephony.Mms.CONTENT_URI, values)
             if (mmsUri == null) {
@@ -592,24 +633,37 @@ class SmsRepository(private val context: Context) {
             }
             val mmsId = mmsUri.lastPathSegment
 
-            // 2. Insert recipient address
-            val addrValues = ContentValues().apply {
-                put("address", address)
-                put("type", 151) // PDU_ADDR_TYPE_TO
-                put("charset", 106) // UTF-8
+            // 2. Insert recipient addresses
+            address.split(",").map { it.trim() }.forEach { addr ->
+                val addrValues = ContentValues().apply {
+                    put("address", addr)
+                    put("type", 151) // PDU_ADDR_TYPE_TO
+                    put("charset", 106) // UTF-8
+                }
+                context.contentResolver.insert(Uri.parse("content://mms/$mmsId/addr"), addrValues)
             }
-            context.contentResolver.insert(Uri.parse("content://mms/$mmsId/addr"), addrValues)
 
-            // 3. Insert media part
-            val partValues = ContentValues().apply {
-                put("ct", context.contentResolver.getType(mediaUri) ?: "image/jpeg")
-                put("name", "media")
-                put("cl", "media")
+            // 3. Insert text part if present
+            if (bodyText != null) {
+                val textValues = ContentValues().apply {
+                    put("ct", "text/plain")
+                    put("text", bodyText)
+                }
+                context.contentResolver.insert(Uri.parse("content://mms/$mmsId/part"), textValues)
             }
-            val partUri = context.contentResolver.insert(Uri.parse("content://mms/$mmsId/part"), partValues)
-            if (partUri != null) {
-                context.contentResolver.openOutputStream(partUri)?.use { out ->
-                    context.contentResolver.openInputStream(mediaUri)?.use { it.copyTo(out) }
+
+            // 4. Insert media part if present
+            if (mediaUri != null) {
+                val partValues = ContentValues().apply {
+                    put("ct", context.contentResolver.getType(mediaUri) ?: "image/jpeg")
+                    put("name", "media")
+                    put("cl", "media")
+                }
+                val partUri = context.contentResolver.insert(Uri.parse("content://mms/$mmsId/part"), partValues)
+                if (partUri != null) {
+                    context.contentResolver.openOutputStream(partUri)?.use { out ->
+                        context.contentResolver.openInputStream(mediaUri)?.use { it.copyTo(out) }
+                    }
                 }
             }
 

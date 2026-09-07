@@ -17,7 +17,7 @@ object MmsUtils {
     const val ACTION_MMS_SENT = "org.leotechs.opensms.MMS_SENT"
     const val ACTION_MMS_DOWNLOADED = "org.leotechs.opensms.MMS_DOWNLOADED"
 
-    fun sendMms(context: Context, phoneNumber: String, mediaUri: Uri) {
+    fun sendMms(context: Context, phoneNumber: String, mediaUri: Uri?, bodyText: String? = null) {
         try {
             val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 context.getSystemService(SmsManager::class.java)
@@ -28,7 +28,11 @@ object MmsUtils {
 
             // 1. Build the PDU
             val sendReq = SendReq()
-            sendReq.addTo(EncodedStringValue(phoneNumber))
+            
+            // Handle multiple recipients
+            phoneNumber.split(",").map { it.trim() }.forEach { addr ->
+                sendReq.addTo(EncodedStringValue(addr))
+            }
             
             // Standard headers required by many carriers
             sendReq.from = EncodedStringValue("insert-address-token")
@@ -36,23 +40,36 @@ object MmsUtils {
             sendReq.expiry = 60 * 60 * 24 * 7
             sendReq.priority = PduHeaders.PRIORITY_NORMAL
             sendReq.date = System.currentTimeMillis() / 1000
+            
+            if (bodyText != null) {
+                sendReq.subject = EncodedStringValue(bodyText)
+            }
 
             val body = PduBody()
-            val part = PduPart()
             
-            val contentType = context.contentResolver.getType(mediaUri) ?: "image/jpeg"
-            part.contentType = contentType.toByteArray()
-            
-            val data = context.contentResolver.openInputStream(mediaUri)?.use { it.readBytes() }
-            if (data == null) {
-                Log.e(TAG, "Failed to read media data from $mediaUri")
-                return
+            // Add Text part if present
+            if (bodyText != null) {
+                val textPart = PduPart()
+                textPart.contentType = "text/plain".toByteArray()
+                textPart.data = bodyText.toByteArray()
+                body.addPart(textPart)
             }
-            part.data = data
-            part.contentLocation = "media".toByteArray()
-            part.contentId = "<media>".toByteArray()
             
-            body.addPart(part)
+            // Add Media part if present
+            if (mediaUri != null) {
+                val part = PduPart()
+                val contentType = context.contentResolver.getType(mediaUri) ?: "image/jpeg"
+                part.contentType = contentType.toByteArray()
+                
+                val data = context.contentResolver.openInputStream(mediaUri)?.use { it.readBytes() }
+                if (data != null) {
+                    part.data = data
+                    part.contentLocation = "media".toByteArray()
+                    part.contentId = "<media>".toByteArray()
+                    body.addPart(part)
+                }
+            }
+            
             sendReq.body = body
 
             val composer = PduComposer(context, sendReq)

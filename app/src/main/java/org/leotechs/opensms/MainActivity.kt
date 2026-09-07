@@ -106,7 +106,7 @@ class MainActivity : ComponentActivity() {
                                     onSendSms = { number: String, message: String, encrypt: Boolean ->
                                         sendSms(number, message, encrypt)
                                     },
-                                    onSendMms = { number: String, uri: Uri ->
+                                    onSendMms = { number: String, uri: Uri? ->
                                         sendMms(number, uri)
                                     },
                                     modifier = Modifier.fillMaxSize()
@@ -152,6 +152,14 @@ class MainActivity : ComponentActivity() {
 
     private fun sendSms(phoneNumber: String, message: String, encrypt: Boolean): Boolean {
         return try {
+            val repository = SmsRepository(this)
+            val isGroup = phoneNumber.contains(",")
+
+            // Apparently group chats only work in MMS
+            if (isGroup) {
+                return sendMms(phoneNumber, null, message)
+            }
+
             val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 this.getSystemService(SmsManager::class.java)
             } else {
@@ -164,7 +172,6 @@ class MainActivity : ComponentActivity() {
                 message
             }
 
-            val repository = SmsRepository(this)
             val threadId = repository.getOrCreateThreadId(phoneNumber)
 
             smsManager.sendTextMessage(phoneNumber, null, finalMessage, null, null)
@@ -177,16 +184,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun sendMms(phoneNumber: String, uri: Uri): Boolean {
+    private fun sendMms(phoneNumber: String, uri: Uri?, bodyText: String? = null): Boolean {
         try {
             val repository = SmsRepository(this)
             val threadId = repository.getOrCreateThreadId(phoneNumber)
 
             // 1. Send via network
-            MmsUtils.sendMms(this, phoneNumber, uri)
+            MmsUtils.sendMms(this, phoneNumber, uri, bodyText)
             
             // 2. Save to database
-            repository.saveSentMms(phoneNumber, uri, threadId)
+            repository.saveSentMms(phoneNumber, uri, bodyText, threadId)
             
             Toast.makeText(this, "MMS Sending...", Toast.LENGTH_SHORT).show()
             return true

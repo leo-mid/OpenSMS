@@ -10,7 +10,9 @@ data class Conversation(
     val contactName: String?,
     val contactPhotoUri: String?,
     val isEncrypted: Boolean,
-    val isRead: Boolean = true
+    val isRead: Boolean = true,
+    val isGroup: Boolean = false,
+    val addresses: List<String> = emptyList()
 )
 
 data class Message(
@@ -22,7 +24,8 @@ data class Message(
     val isEncrypted: Boolean,
     val isMms: Boolean = false,
     val mediaUri: Uri? = null,
-    val mediaContentType: String? = null
+    val mediaContentType: String? = null,
+    val senderAddress: String? = null // Address of the actual sender (useful for group chats)
 )
 
 data class Contact(

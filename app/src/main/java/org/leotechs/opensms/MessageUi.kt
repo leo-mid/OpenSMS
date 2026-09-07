@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -221,7 +222,21 @@ fun ConversationItem(conversation: Conversation, onClick: () -> Unit) {
                 }
 
                 // Handles the contact picture information
-                if (conversation.contactPhotoUri != null) {
+                if (conversation.isGroup) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.secondaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Group,
+                            contentDescription = "Group",
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                } else if (conversation.contactPhotoUri != null) {
                     AsyncImage(
                         model = conversation.contactPhotoUri,
                         contentDescription = null,
@@ -300,7 +315,7 @@ fun MessageDetail(
     contactName: String?,
     onBack: () -> Unit,
     onSendSms: (String, String, Boolean) -> Boolean,
-    onSendMms: (String, Uri) -> Boolean,
+    onSendMms: (String, Uri?) -> Boolean,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -346,9 +361,10 @@ fun MessageDetail(
         val msgs = repository.getMessages(threadId)
         messages.clear()
         messages.addAll(msgs)
-        if (msgs.isNotEmpty()) {
-            phoneNumber = msgs.last().address
-        }
+        
+        // Get all addresses for the conversation
+        val addresses = repository.getAddressesForThread(threadId)
+        phoneNumber = addresses.joinToString(", ")
     }
 
     LaunchedEffect(threadId) {
@@ -421,8 +437,9 @@ fun MessageDetail(
                     .weight(1f)
                     .padding(horizontal = 16.dp)
             ) {
+                val isGroup = phoneNumber.contains(",")
                 items(messages) { message ->
-                    MessageItem(message)
+                    MessageItem(message, isGroup)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
             }
@@ -492,9 +509,11 @@ fun MessageDetail(
 
 // Displays all the messages in a conversation
 @Composable
-fun MessageItem(message: Message) {
+fun MessageItem(message: Message, isGroup: Boolean = false) {
     val isSent = message.type == 2
     var showFullScreen by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val repository = remember { SmsRepository(context) }
 
     // Creates the view to see media attachments in the conversation
     // Plays the videos in this box as well
@@ -532,60 +551,74 @@ fun MessageItem(message: Message) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start
     ) {
-        Box(
-            // Standard message box with no images and stuff
-            modifier = Modifier
-                .padding(vertical = 4.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(if (isSent) Color(0xFF007AFF) else Color(0xFFE9E9EB))
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            // Checks if the message has an attachment and handles it to display it in the correct way
-            Column {
-                if (message.isMms && message.mediaUri != null) {
-                    val context = LocalContext.current
-                    val isVideo = message.mediaContentType?.startsWith("video/") == true
-                    
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .padding(vertical = 4.dp)
-                            .clickable { showFullScreen = true }
-                    ) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(message.mediaUri)
-                                .decoderFactory(VideoFrameDecoder.Factory())
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = "MMS Content",
+        Column(horizontalAlignment = if (isSent) Alignment.End else Alignment.Start) {
+            if (isGroup && !isSent && message.senderAddress != null) {
+                val senderInfo = remember(message.senderAddress) {
+                    repository.getContactInfo(message.senderAddress)
+                }
+                Text(
+                    text = senderInfo.first ?: message.senderAddress,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(start = 12.dp, bottom = 2.dp)
+                )
+            }
+
+            Box(
+                // Standard message box with no images and stuff
+                modifier = Modifier
+                    .padding(vertical = 4.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(if (isSent) Color(0xFF007AFF) else Color(0xFFE9E9EB))
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                // Checks if the message has an attachment and handles it to display it in the correct way
+                Column {
+                    if (message.isMms && message.mediaUri != null) {
+                        val context = LocalContext.current
+                        val isVideo = message.mediaContentType?.startsWith("video/") == true
+                        
+                        Box(
+                            contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .fillMaxWidth(0.7f)
-                                .heightIn(max = 250.dp)
-                                .clip(RoundedCornerShape(12.dp)),
-                            contentScale = ContentScale.Crop,
-                            onError = {
-                                Log.e("MessageUi", "Coil failed to load ${message.mediaUri}: ${it.result.throwable}")
-                            }
-                        )
-                        if (isVideo) {
-                            Icon(
-                                imageVector = Icons.Default.PlayCircle,
-                                contentDescription = "Video",
-                                tint = Color.White.copy(alpha = 0.8f),
-                                modifier = Modifier.size(48.dp)
+                                .padding(vertical = 4.dp)
+                                .clickable { showFullScreen = true }
+                        ) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(message.mediaUri)
+                                    .decoderFactory(VideoFrameDecoder.Factory())
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = "MMS Content",
+                                modifier = Modifier
+                                    .fillMaxWidth(0.7f)
+                                    .heightIn(max = 250.dp)
+                                    .clip(RoundedCornerShape(12.dp)),
+                                contentScale = ContentScale.Crop,
+                                onError = {
+                                    Log.e("MessageUi", "Coil failed to load ${message.mediaUri}: ${it.result.throwable}")
+                                }
                             )
+                            if (isVideo) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayCircle,
+                                    contentDescription = "Video",
+                                    tint = Color.White.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(48.dp)
+                                )
+                            }
+                        }
+                        if (message.body.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(4.dp))
                         }
                     }
                     if (message.body.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = message.body,
+                            color = if (isSent) Color.White else Color.Black
+                        )
                     }
-                }
-                if (message.body.isNotEmpty()) {
-                    Text(
-                        text = message.body,
-                        color = if (isSent) Color.White else Color.Black
-                    )
                 }
             }
         }

@@ -16,12 +16,12 @@ As of version 1.3.0 there is:
 * Notifications (1.2.0)
 * Seeing unread messages (1.2.0)
 * Deleting conversations (1.3.0)
+* Group conversations (1.3.0)
 
 ## Upcoming Features
 These features are coming soon:
 * Creating Contacts
 * How messages are loaded to be viewed
-* Group conversations
 * Deleting messages
 * Message actions such as saving MMS to device
 * Enabling Encrypted SMS (Would only work if both/everyone has this app)

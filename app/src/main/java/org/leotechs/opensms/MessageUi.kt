@@ -19,9 +19,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -38,11 +40,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import coil.decode.VideoFrameDecoder
+import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -51,7 +54,6 @@ import org.leotechs.opensms.ui.theme.OpenSMSTheme
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
-import androidx.core.net.toUri
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -329,6 +331,7 @@ fun MessageDetail(
     var loadJob by remember { mutableStateOf<Job?>(null) }
     var lastUpdate by remember { mutableStateOf(0L) }
     val scope = rememberCoroutineScope()
+    val isGroup = phoneNumber.contains(",")
 
     // Media Handling
     var tempImageUri by remember { mutableStateOf<Uri?>(null) }
@@ -473,6 +476,19 @@ fun MessageDetail(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 8.dp)
                 )
+
+                // Shoves the call & menu button to the right
+                Spacer(modifier = Modifier.weight(1f))
+
+                if (!isGroup){
+                    IconButton(onClick = { /*TODO*/ }) {
+                        Icon(Icons.Filled.Call, contentDescription = "Make Call")
+                    }
+                }
+
+                IconButton(onClick = { /*TODO*/ }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "More Options")
+                }
             }
 
             val listState = rememberLazyListState()
@@ -504,7 +520,6 @@ fun MessageDetail(
                     .weight(1f)
                     .padding(horizontal = 16.dp)
             ) {
-                val isGroup = phoneNumber.contains(",")
                 items(messages, key = { it.id }) { message ->
                     Box(modifier = Modifier.animateItem()) {
                         MessageItem(message, isGroup)

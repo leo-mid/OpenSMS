@@ -2,10 +2,10 @@ package org.leotechs.opensms
 
 import android.app.Application
 import android.database.ContentObserver
-import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +21,6 @@ class ConversationViewModel(application: Application) : AndroidViewModel(applica
     val conversations: StateFlow<List<Conversation>> = _conversations.asStateFlow()
 
     private val _isRefreshing = MutableStateFlow(false)
-    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) {
@@ -31,9 +30,9 @@ class ConversationViewModel(application: Application) : AndroidViewModel(applica
 
     init {
         val resolver = application.contentResolver
-        resolver.registerContentObserver(Uri.parse("content://mms-sms/"), true, observer)
-        resolver.registerContentObserver(Uri.parse("content://sms/"), true, observer)
-        resolver.registerContentObserver(Uri.parse("content://mms/"), true, observer)
+        resolver.registerContentObserver("content://mms-sms/".toUri(), true, observer)
+        resolver.registerContentObserver("content://sms/".toUri(), true, observer)
+        resolver.registerContentObserver("content://mms/".toUri(), true, observer)
         refresh()
     }
 

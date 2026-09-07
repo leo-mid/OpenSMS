@@ -21,7 +21,6 @@ As of version 1.3.0 there is:
 ## Upcoming Features
 These features are coming soon:
 * Creating Contacts
-* How messages are loaded to be viewed
 * Deleting messages
 * Message actions such as saving MMS to device
 * Enabling Encrypted SMS (Would only work if both/everyone has this app)

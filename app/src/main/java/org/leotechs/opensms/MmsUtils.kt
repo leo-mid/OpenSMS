@@ -19,12 +19,8 @@ object MmsUtils {
 
     fun sendMms(context: Context, phoneNumber: String, mediaUri: Uri?, bodyText: String? = null): Boolean {
         try {
-            val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val smsManager =
                 context.getSystemService(SmsManager::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                SmsManager.getDefault()
-            }
 
             // 1. Build the PDU
             val sendReq = SendReq()

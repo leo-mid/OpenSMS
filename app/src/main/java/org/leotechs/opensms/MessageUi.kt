@@ -51,6 +51,7 @@ import org.leotechs.opensms.ui.theme.OpenSMSTheme
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.core.net.toUri
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -438,9 +439,9 @@ fun MessageDetail(
             }
         }
         val resolver = context.contentResolver
-        resolver.registerContentObserver(Uri.parse("content://mms-sms/"), true, observer)
-        resolver.registerContentObserver(Uri.parse("content://sms/"), true, observer)
-        resolver.registerContentObserver(Uri.parse("content://mms/"), true, observer)
+        resolver.registerContentObserver("content://mms-sms/".toUri(), true, observer)
+        resolver.registerContentObserver("content://sms/".toUri(), true, observer)
+        resolver.registerContentObserver("content://mms/".toUri(), true, observer)
         
         onDispose {
             resolver.unregisterContentObserver(observer)

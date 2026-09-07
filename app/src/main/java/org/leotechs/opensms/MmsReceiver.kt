@@ -9,6 +9,7 @@ import android.provider.Telephony
 import android.util.Log
 import com.google.android.mms.pdu_alt.NotificationInd
 import com.google.android.mms.pdu_alt.PduParser
+import androidx.core.net.toUri
 
 class MmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -21,7 +22,7 @@ class MmsReceiver : BroadcastReceiver() {
             try {
                 val pdu = PduParser(data).parse()
                 if (pdu is NotificationInd) {
-                    val from = pdu.from?.getString() ?: "Unknown"
+                    val from = pdu.from?.string ?: "Unknown"
                     val contentLocation = pdu.contentLocation?.let { String(it) } ?: ""
                     
                     Log.d("MmsReceiver", "MMS notification from $from, loc: $contentLocation")
@@ -59,14 +60,14 @@ class MmsReceiver : BroadcastReceiver() {
             val uri = context.contentResolver.insert(Telephony.Mms.Inbox.CONTENT_URI, values)
             if (uri != null) {
                 val mmsId = uri.lastPathSegment
-                val from = pdu.from?.getString() ?: "Unknown"
+                val from = pdu.from?.string ?: "Unknown"
                 
                 val addrValues = ContentValues().apply {
                     put("address", from)
                     put("type", 137) // PDU_ADDR_TYPE_FROM
                     put("charset", 106)
                 }
-                context.contentResolver.insert(Uri.parse("content://mms/$mmsId/addr"), addrValues)
+                context.contentResolver.insert("content://mms/$mmsId/addr".toUri(), addrValues)
                 Log.d("MmsReceiver", "Successfully saved MMS notification: $uri")
             }
             return uri

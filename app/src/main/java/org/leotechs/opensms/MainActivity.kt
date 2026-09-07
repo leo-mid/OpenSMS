@@ -5,7 +5,6 @@ import android.app.role.RoleManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.telephony.SmsManager
 import android.util.Log
@@ -160,11 +159,8 @@ class MainActivity : ComponentActivity() {
                 return sendMms(phoneNumber, null, message)
             }
 
-            val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val smsManager =
                 this.getSystemService(SmsManager::class.java)
-            } else {
-                SmsManager.getDefault()
-            }
 
             val finalMessage = if (encrypt) {
                 "[ENC]${CryptoUtils.encrypt(message)}"
@@ -229,6 +225,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_DEFAULT_APP) {
@@ -243,13 +240,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @Deprecated("Deprecated in Java")
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        val granted = if(checkPermissionGranted(requestCode, permissions, grantResults)) "permissions granted" else "some permissions not granted"
+        val granted = if(checkPermissionGranted(requestCode, grantResults)) "permissions granted" else "some permissions not granted"
         Toast.makeText(this, granted, Toast.LENGTH_SHORT).show()
     }
 
-    private fun checkPermissionGranted(requestCode: Int, permissions: Array<String>, grantResults: IntArray): Boolean{
+    private fun checkPermissionGranted(requestCode: Int, grantResults: IntArray): Boolean{
         when (requestCode) {
             MY_PERMISSIONS_REQUEST_SMS -> {
                 return grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }

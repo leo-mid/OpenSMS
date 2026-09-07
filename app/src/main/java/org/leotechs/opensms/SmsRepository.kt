@@ -13,7 +13,6 @@ import androidx.core.net.toUri
 class SmsRepository(private val context: Context) {
 
     private val contactCache = mutableMapOf<String, Pair<String?, String?>>()
-    private val addressCache = mutableMapOf<Long, String>()
     private val canonicalAddressCache = mutableMapOf<Long, String>()
 
     fun getConversations(): List<Conversation> {
@@ -27,7 +26,7 @@ class SmsRepository(private val context: Context) {
         try {
             // Using a specific projection for performance
             val projection = arrayOf("_id", "snippet", "date", "read", "recipient_ids")
-            val uri = Uri.parse("content://mms-sms/conversations?simple=true")
+            val uri = "content://mms-sms/conversations?simple=true".toUri()
             val cursor = context.contentResolver.query(
                 uri,
                 projection,
@@ -51,7 +50,7 @@ class SmsRepository(private val context: Context) {
                         val isRead = it.getInt(readIdx) == 1
                         
                         // Normalize date: seconds to milliseconds
-                        if (date > 0 && date < 1000000000000L) date *= 1000
+                        if (date in 1..<1000000000000L) date *= 1000
 
                         // Optimization: Determine if last message was MMS using pre-fetched data
                         val mmsData = lastMmsInfo[threadId]
@@ -104,7 +103,7 @@ class SmsRepository(private val context: Context) {
                         val displaySnippet = if (isEncrypted) {
                             try {
                                 "[Decrypted] " + CryptoUtils.decrypt(snippet.substring(5))
-                            } catch (e: Exception) {
+                            } catch (_: Exception) {
                                 snippet
                             }
                         } else {
@@ -136,49 +135,8 @@ class SmsRepository(private val context: Context) {
         return conversations
     }
 
-    fun getAddressForThread(threadId: Long): String? {
-        addressCache[threadId]?.let { return it }
-        try {
-            // Try MMS first
-            val mmsCursor = context.contentResolver.query(
-                Uri.parse("content://mms/"),
-                arrayOf("_id"),
-                "thread_id = ?",
-                arrayOf(threadId.toString()),
-                "date DESC LIMIT 1"
-            )
-            mmsCursor?.use {
-                if (it.moveToFirst()) {
-                    val idx = it.getColumnIndex("_id")
-                    if (idx != -1) {
-                        val mmsId = it.getLong(idx)
-                        val addr = getMmsAddress(mmsId)
-                        if (addr != null) return addr
-                    }
-                }
-            }
-
-            // Fallback to SMS
-            val cursor = context.contentResolver.query(
-                Telephony.Sms.CONTENT_URI,
-                arrayOf("address"),
-                "thread_id = ?",
-                arrayOf(threadId.toString()),
-                "date DESC LIMIT 1"
-            )
-            cursor?.use {
-                if (it.moveToFirst()) {
-                    return it.getString(0)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("SmsRepository", "Error getting address for thread $threadId", e)
-        }
-        return null
-    }
-
     private fun getMmsAddress(mmsId: Long, type: Int? = null): String? {
-        val uri = Uri.parse("content://mms/$mmsId/addr")
+        val uri = "content://mms/$mmsId/addr".toUri()
         val selection = if (type != null) "type = ?" else null
         val selectionArgs = if (type != null) arrayOf(type.toString()) else null
         
@@ -225,13 +183,13 @@ class SmsRepository(private val context: Context) {
                     val address = cursor.getString(addressIdx) ?: ""
                     val type = cursor.getInt(typeIdx)
 
-                    if (date > 0 && date < 1000000000000L) date *= 1000
+                    if (date in 1..<1000000000000L) date *= 1000
 
                     val isEncrypted = body.startsWith("[ENC]")
                     val displayBody = if (isEncrypted) {
                         try {
                             "[Decrypted] " + CryptoUtils.decrypt(body.substring(5))
-                        } catch (e: Exception) { body }
+                        } catch (_: Exception) { body }
                     } else body
 
                     messages.add(
@@ -268,7 +226,7 @@ class SmsRepository(private val context: Context) {
                     var date = cursor.getLong(dateIdx)
                     val msgBox = cursor.getInt(msgBoxIdx)
 
-                    if (date > 0 && date < 1000000000000L) date *= 1000
+                    if (date in 1..<1000000000000L) date *= 1000
 
                     val mmsMedia = getMmsMedia(id)
                     val otherPartyAddress = if (msgBox == 1) getMmsAddress(id, 137) else getMmsAddress(id, 151)
@@ -301,7 +259,7 @@ class SmsRepository(private val context: Context) {
 
     private fun getMmsMedia(mmsId: Long): Triple<String?, Uri?, String?>? {
         val selectionPart = "mid = ?"
-        val uri = Uri.parse("content://mms/part")
+        val uri = "content://mms/part".toUri()
         val cursor = context.contentResolver.query(
             uri,
             null,
@@ -327,7 +285,7 @@ class SmsRepository(private val context: Context) {
                     body = if (textIndex != -1) it.getString(textIndex) else null
                 } else if (ct != null && (ct.startsWith("image/") || ct.startsWith("video/"))) {
                     val partId = if (idIndex != -1) it.getLong(idIndex) else 0
-                    mediaUri = Uri.parse("content://mms/part/$partId")
+                    mediaUri = "content://mms/part/$partId".toUri()
                     contentType = ct
                     Log.d("SmsRepository", "Found Media part: $mediaUri ($ct)")
                 }
@@ -344,7 +302,7 @@ class SmsRepository(private val context: Context) {
     private fun loadCanonicalAddresses() {
         if (canonicalAddressCache.isNotEmpty()) return
         try {
-            val uri = Uri.parse("content://mms-sms/canonical-addresses")
+            val uri = "content://mms-sms/canonical-addresses".toUri()
             context.contentResolver.query(uri, arrayOf("_id", "address"), null, null, null)?.use { cursor ->
                 val idIdx = cursor.getColumnIndex("_id")
                 val addrIdx = cursor.getColumnIndex("address")
@@ -389,7 +347,7 @@ class SmsRepository(private val context: Context) {
     private fun getAttachmentCounts(): Map<Long, Int> {
         val map = mutableMapOf<Long, Int>()
         try {
-            val uri = Uri.parse("content://mms/part")
+            val uri = "content://mms/part".toUri()
             val cursor = context.contentResolver.query(
                 uri,
                 arrayOf("mid"),
@@ -407,105 +365,6 @@ class SmsRepository(private val context: Context) {
             Log.e("SmsRepository", "Error pre-fetching attachment counts", e)
         }
         return map
-    }
-
-    private fun getMmsAttachmentCount(mmsId: Long): Int {
-        val uri = Uri.parse("content://mms/part")
-        return try {
-            context.contentResolver.query(
-                uri,
-                arrayOf("_id"),
-                "mid = ? AND ct != 'application/smil' AND ct != 'text/plain'",
-                arrayOf(mmsId.toString()),
-                null
-            )?.use { it.count } ?: 0
-        } catch (e: Exception) {
-            Log.e("SmsRepository", "Error getting attachment count for MMS $mmsId", e)
-            0
-        }
-    }
-
-    private fun isLastMessageMms(threadId: Long): Long? {
-        // Try unified conversation view first as it's most accurate for what the system thinks is latest
-        try {
-            val uri = Uri.parse("content://mms-sms/conversations/$threadId")
-            context.contentResolver.query(
-                uri,
-                null,
-                null,
-                null,
-                "date DESC LIMIT 1"
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val transportIdx = cursor.getColumnIndex("transport_type")
-                    val ctIdx = cursor.getColumnIndex("ct_t")
-                    val mTypeIdx = cursor.getColumnIndex("m_type")
-                    val idIdx = cursor.getColumnIndex("_id")
-                    
-                    val transport = if (transportIdx != -1) cursor.getString(transportIdx) else null
-                    val ct = if (ctIdx != -1) cursor.getString(ctIdx) else null
-                    val mType = if (mTypeIdx != -1) cursor.getInt(mTypeIdx) else -1
-                    
-                    val isMms = transport == "mms" || (ct != null && ct.contains("multipart")) || mType > 0
-                    if (isMms && idIdx != -1) {
-                        return cursor.getLong(idIdx)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.w("SmsRepository", "Unified query failed for thread $threadId, falling back")
-        }
-
-        var lastSmsDate = -1L
-        var lastMmsDate = -1L
-        var lastMmsId = -1L
-
-        // 1. Query latest SMS
-        try {
-            context.contentResolver.query(
-                Telephony.Sms.CONTENT_URI,
-                arrayOf(Telephony.Sms.DATE),
-                "${Telephony.Sms.THREAD_ID} = ?",
-                arrayOf(threadId.toString()),
-                "${Telephony.Sms.DATE} DESC LIMIT 1"
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    lastSmsDate = cursor.getLong(0)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("SmsRepository", "Error querying last SMS for thread $threadId", e)
-        }
-
-        // 2. Query latest MMS
-        try {
-            context.contentResolver.query(
-                Telephony.Mms.CONTENT_URI,
-                arrayOf(Telephony.Mms._ID, Telephony.Mms.DATE),
-                "${Telephony.Mms.THREAD_ID} = ?",
-                arrayOf(threadId.toString()),
-                "${Telephony.Mms.DATE} DESC LIMIT 1"
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    lastMmsId = cursor.getLong(0)
-                    lastMmsDate = cursor.getLong(1)
-                    // Normalize MMS date: seconds to milliseconds
-                    if (lastMmsDate > 0 && lastMmsDate < 1000000000000L) {
-                        lastMmsDate *= 1000
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("SmsRepository", "Error querying last MMS for thread $threadId", e)
-        }
-
-        // 3. Compare dates. If MMS is newer or close to SMS (buffer for precision), return its ID.
-        // We use a 2-second buffer because MMS date is often in seconds while SMS is in ms.
-        return if (lastMmsId != -1L && (lastSmsDate == -1L || lastMmsDate >= (lastSmsDate - 2000))) {
-            lastMmsId
-        } else {
-            null
-        }
     }
 
     fun searchContacts(query: String): List<Contact> {
@@ -567,7 +426,7 @@ class SmsRepository(private val context: Context) {
         val addresses = mutableListOf<String>()
         try {
             // Query the threads table directly for the recipient_ids
-            val uri = Uri.parse("content://mms-sms/conversations?simple=true")
+            val uri = "content://mms-sms/conversations?simple=true".toUri()
             context.contentResolver.query(uri, arrayOf("recipient_ids"), "_id = ?", arrayOf(threadId.toString()), null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
                     val recipientIds = cursor.getString(0) ?: ""
@@ -589,7 +448,7 @@ class SmsRepository(private val context: Context) {
         // If the above failed or returned nothing, try to find addresses from messages in this thread
         if (addresses.isEmpty()) {
             try {
-                val uri = Uri.parse("content://mms-sms/conversations/$threadId")
+                val uri = "content://mms-sms/conversations/$threadId".toUri()
                 context.contentResolver.query(uri, arrayOf("address"), "address IS NOT NULL", null, "date DESC LIMIT 5")?.use { cursor ->
                     val addrIdx = cursor.getColumnIndex("address")
                     while (cursor.moveToNext()) {
@@ -619,7 +478,7 @@ class SmsRepository(private val context: Context) {
 
     fun isGroupThread(threadId: Long): Boolean {
         try {
-            val uri = Uri.parse("content://mms-sms/conversations?simple=true")
+            val uri = "content://mms-sms/conversations?simple=true".toUri()
             context.contentResolver.query(uri, arrayOf("recipient_ids"), "_id = ?", arrayOf(threadId.toString()), null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
                     val recipientIds = cursor.getString(0) ?: ""
@@ -707,7 +566,7 @@ class SmsRepository(private val context: Context) {
                     put("type", 151) // PDU_ADDR_TYPE_TO
                     put("charset", 106) // UTF-8
                 }
-                context.contentResolver.insert(Uri.parse("content://mms/$mmsId/addr"), addrValues)
+                context.contentResolver.insert("content://mms/$mmsId/addr".toUri(), addrValues)
             }
 
             // 2b. Insert "insert-address-token" as the FROM address locally to help system grouping
@@ -716,7 +575,7 @@ class SmsRepository(private val context: Context) {
                 put("type", 137) // PDU_ADDR_TYPE_FROM
                 put("charset", 106)
             }
-            context.contentResolver.insert(Uri.parse("content://mms/$mmsId/addr"), fromValues)
+            context.contentResolver.insert("content://mms/$mmsId/addr".toUri(), fromValues)
 
             // 3. Insert text part if present
             if (bodyText != null) {
@@ -724,7 +583,7 @@ class SmsRepository(private val context: Context) {
                     put("ct", "text/plain")
                     put("text", bodyText)
                 }
-                context.contentResolver.insert(Uri.parse("content://mms/$mmsId/part"), textValues)
+                context.contentResolver.insert("content://mms/$mmsId/part".toUri(), textValues)
             }
 
             // 4. Insert media part if present
@@ -734,7 +593,7 @@ class SmsRepository(private val context: Context) {
                     put("name", "media")
                     put("cl", "media")
                 }
-                val partUri = context.contentResolver.insert(Uri.parse("content://mms/$mmsId/part"), partValues)
+                val partUri = context.contentResolver.insert("content://mms/$mmsId/part".toUri(), partValues)
                 if (partUri != null) {
                     context.contentResolver.openOutputStream(partUri)?.use { out ->
                         context.contentResolver.openInputStream(mediaUri)?.use { it.copyTo(out) }
@@ -755,7 +614,7 @@ class SmsRepository(private val context: Context) {
             // Try to get sub_id from the notification message to maintain consistency
             val subId = try {
                 context.contentResolver.query(
-                    Uri.parse("content://mms/$mmsId"),
+                    "content://mms/$mmsId".toUri(),
                     arrayOf("sub_id"),
                     null, null, null
                 )?.use { cursor ->
@@ -764,7 +623,7 @@ class SmsRepository(private val context: Context) {
                         if (subIdIndex != -1) cursor.getInt(subIdIndex) else 0
                     } else 0
                 } ?: 0
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 0 // Default to 0 if sub_id column is not found or query fails
             }
 
@@ -775,7 +634,7 @@ class SmsRepository(private val context: Context) {
             
             if (uri != null) {
                 // Delete the old placeholder notification message
-                context.contentResolver.delete(Uri.parse("content://mms/$mmsId"), null, null)
+                context.contentResolver.delete("content://mms/$mmsId".toUri(), null, null)
                 Log.d("SmsRepository", "Successfully persisted received MMS to $uri and removed notification $mmsId")
 
                 // Show notification for the final persisted message
@@ -806,7 +665,7 @@ class SmsRepository(private val context: Context) {
                     cursor.getLong(0)
                 } else -1L
             } ?: -1L
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             -1L
         }
     }

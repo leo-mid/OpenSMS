@@ -11,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "org.leotechs.opensms"
-        minSdk = 29
+        minSdk = 33
         targetSdk = 37
         versionCode = 1
         versionName = "v1.3.0"

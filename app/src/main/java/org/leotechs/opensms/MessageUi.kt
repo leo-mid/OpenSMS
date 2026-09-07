@@ -84,13 +84,17 @@ fun ConversationList(
                 // Fetches all the conversations and starts to list them
                 items(conversations, key = { it.threadId }) { conversation ->
                     val currentConversation by rememberUpdatedState(conversation)
-                    val dismissState = rememberSwipeToDismissBoxState(
+
+                    val conversationSwipeActions = rememberSwipeToDismissBoxState(
                         confirmValueChange = { value ->
                             if (value == SwipeToDismissBoxValue.StartToEnd) {
                                 viewModel.toggleReadStatus(
                                     currentConversation.threadId,
                                     currentConversation.isRead
                                 )
+                                false
+                            } else if (value == SwipeToDismissBoxValue.EndToStart) {
+                                viewModel.deleteConversation(conversation.threadId)
                                 false
                             } else {
                                 false
@@ -99,84 +103,62 @@ fun ConversationList(
                         positionalThreshold = { totalDistance -> totalDistance * 0.8f }
                     )
 
-                    val deleteState = rememberSwipeToDismissBoxState(
-                        confirmValueChange = { value ->
-                            if (value == SwipeToDismissBoxValue.EndToStart) {
-                                viewModel.deleteConversation(conversation.threadId)
-                                false
-                            } else {
-                                false
-                            }
-                        }
-                    )
-
-                    // Swipe to delete a conversation - Right to left
                     SwipeToDismissBox(
-                        state = deleteState,
-                        enableDismissFromStartToEnd =  false,
+                        state = conversationSwipeActions,
+                        enableDismissFromStartToEnd = true,
                         enableDismissFromEndToStart = true,
                         backgroundContent = {
-                            Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .graphicsLayer {
-                                        alpha = if (dismissState.progress > 0f) 1f else 0f
-                                    }
-                                    .background(Color(0xFF8C1212))
-                                    .padding(horizontal = 20.dp),
-                                contentAlignment = Alignment.CenterEnd
-                            ){
-                                Text(
-                                    text = "Delete",
-                                    color = Color(0xFFFF7A7A),
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.graphicsLayer {
-                                        alpha = if (dismissState.progress > 0.4f) 1f else 0f
-                                    }
-                                )
+                            when (conversationSwipeActions.dismissDirection){
+                                SwipeToDismissBoxValue.StartToEnd -> Box(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer {
+                                            alpha = if (conversationSwipeActions.progress > 0f) 1f else 0f
+                                        }
+                                        .background(Color(0xff3b719f))
+                                        .padding(horizontal = 20.dp),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    Text(
+                                        text = if (conversation.isRead) "Mark as Unread" else "Mark as Read",
+                                        color = Color(0xFFA4D5FF),
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.graphicsLayer {
+                                            alpha = if (conversationSwipeActions.progress > 0.4f) 1f else 0f
+                                        }
+                                    )
+                                }
+                                SwipeToDismissBoxValue.EndToStart -> Box(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer {
+                                            alpha = if (conversationSwipeActions.progress > 0f) 1f else 0f
+                                        }
+                                        .background(Color(0xFF8C1212))
+                                        .padding(horizontal = 20.dp),
+                                    contentAlignment = Alignment.CenterEnd
+                                ){
+                                    Text(
+                                        text = "Delete",
+                                        color = Color(0xFFFF7A7A),
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.graphicsLayer {
+                                            alpha = if (conversationSwipeActions.progress > 0.4f) 1f else 0f
+                                        }
+                                    )
+                                }
+                                else -> {
+                                    // Nothing goes here gang left internally blank
+                                }
                             }
                         }
                     ) {
+                        // What Actually gets displayed with the swipe controls to it
                         ConversationItem(conversation) {
                             onConversationClick(conversation.threadId, conversation.contactName)
                         }
                     }
 
-                    // Handles the marking as read/unread swipe controls
-                    SwipeToDismissBox(
-                        state = dismissState,
-                        // Left to right
-                        enableDismissFromStartToEnd = true,
-                        // Right to Left
-                        enableDismissFromEndToStart = false,
-                        backgroundContent = {
-                            // Use graphicsLayer for alpha to avoid recomposition
-                            Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .graphicsLayer {
-                                        alpha = if (dismissState.progress > 0f) 1f else 0f
-                                    }
-                                    .background(Color(0xff3b719f))
-                                    .padding(horizontal = 20.dp),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                Text(
-                                    text = if (conversation.isRead) "Mark as Unread" else "Mark as Read",
-                                    color = Color(0xFFA4D5FF),
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.graphicsLayer {
-                                        alpha = if (dismissState.progress > 0.4f) 1f else 0f
-                                    }
-                                )
-                            }
-                        }
-                    ) {
-                        // What Actually gets displayed with the tap controls with it
-                        ConversationItem(conversation) {
-                            onConversationClick(conversation.threadId, conversation.contactName)
-                        }
-                    }
                     HorizontalDivider()
                 }
             }

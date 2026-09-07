@@ -574,15 +574,18 @@ class SmsRepository(private val context: Context) {
     fun getAddressesForThread(threadId: Long): List<String> {
         val addresses = mutableListOf<String>()
         try {
-            val projection = arrayOf("recipient_ids")
+            // Query the threads table directly for the recipient_ids
             val uri = Uri.parse("content://mms-sms/conversations?simple=true")
-            context.contentResolver.query(uri, projection, "_id = ?", arrayOf(threadId.toString()), null)?.use { cursor ->
+            context.contentResolver.query(uri, arrayOf("recipient_ids"), "_id = ?", arrayOf(threadId.toString()), null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
                     val recipientIds = cursor.getString(0) ?: ""
                     if (recipientIds.isNotEmpty()) {
                         loadCanonicalAddresses()
                         recipientIds.split(" ").forEach { idStr ->
-                            canonicalAddressCache[idStr.toLongOrNull() ?: -1L]?.let { addresses.add(it) }
+                            val addr = canonicalAddressCache[idStr.toLongOrNull() ?: -1L]
+                            if (addr != null && addr != "insert-address-token") {
+                                addresses.add(addr)
+                            }
                         }
                     }
                 }
@@ -590,7 +593,26 @@ class SmsRepository(private val context: Context) {
         } catch (e: Exception) {
             Log.e("SmsRepository", "Error getting addresses for thread $threadId", e)
         }
-        return addresses
+        
+        // If the above failed or returned nothing, try to find addresses from messages in this thread
+        if (addresses.isEmpty()) {
+            try {
+                val uri = Uri.parse("content://mms-sms/conversations/$threadId")
+                context.contentResolver.query(uri, arrayOf("address"), "address IS NOT NULL", null, "date DESC LIMIT 5")?.use { cursor ->
+                    val addrIdx = cursor.getColumnIndex("address")
+                    while (cursor.moveToNext()) {
+                        val addr = cursor.getString(addrIdx)
+                        if (addr != null && !addresses.contains(addr)) {
+                            addresses.add(addr)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("SmsRepository", "Fallback address fetch failed", e)
+            }
+        }
+        
+        return addresses.distinct()
     }
 
     fun getOrCreateThreadId(address: String): Long {
@@ -695,6 +717,14 @@ class SmsRepository(private val context: Context) {
                 }
                 context.contentResolver.insert(Uri.parse("content://mms/$mmsId/addr"), addrValues)
             }
+
+            // 2b. Insert "insert-address-token" as the FROM address locally to help system grouping
+            val fromValues = ContentValues().apply {
+                put("address", "insert-address-token")
+                put("type", 137) // PDU_ADDR_TYPE_FROM
+                put("charset", 106)
+            }
+            context.contentResolver.insert(Uri.parse("content://mms/$mmsId/addr"), fromValues)
 
             // 3. Insert text part if present
             if (bodyText != null) {

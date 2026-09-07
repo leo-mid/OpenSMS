@@ -4,6 +4,8 @@ import android.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 
+// Very simple encryption/decryption tool
+// This was just for testing purposes and when implemented will use RSA instead of AES
 object CryptoUtils {
     private const val ALGORITHM = "AES"
     private val KEY = "MySecretKey12345".toByteArray() // 16 bytes for AES-128

@@ -44,6 +44,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.decode.VideoFrameDecoder
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.leotechs.opensms.ui.theme.OpenSMSTheme
@@ -324,6 +325,8 @@ fun MessageDetail(
     var page by remember { mutableStateOf(0) }
     var canLoadMore by remember { mutableStateOf(true) }
     var isLoading by remember { mutableStateOf(false) }
+    var loadJob by remember { mutableStateOf<Job?>(null) }
+    var lastUpdate by remember { mutableStateOf(0L) }
     val scope = rememberCoroutineScope()
 
     // Media Handling
@@ -360,44 +363,51 @@ fun MessageDetail(
     BackHandler(onBack = onBack)
 
     fun loadMessages(isRefresh: Boolean = false) {
-        if (isLoading) return
-        if (!isRefresh && !canLoadMore) return
+        if (isRefresh) {
+            loadJob?.cancel()
+        } else if (isLoading || !canLoadMore) {
+            return
+        }
         
-        scope.launch(Dispatchers.IO) {
+        loadJob = scope.launch(Dispatchers.IO) {
             isLoading = true
-            if (isRefresh) {
-                page = 0
-                canLoadMore = true
-            }
-
-            val newMsgs = repository.getMessages(threadId, limit = 30, offset = page * 30)
-            
-            withContext(Dispatchers.Main) {
+            try {
                 if (isRefresh) {
-                    messages.clear()
-                }
-                
-                if (newMsgs.size < 30) {
-                    canLoadMore = false
+                    page = 0
+                    canLoadMore = true
                 }
 
-                // Add only messages not already in the list to avoid duplicates
-                val existingIds = messages.map { it.id }.toSet()
-                val uniqueNewMsgs = newMsgs.filter { !existingIds.contains(it.id) }
-                messages.addAll(uniqueNewMsgs)
+                val newMsgs = repository.getMessages(threadId, limit = 30, offset = page * 30)
                 
-                // Sort newest to oldest so index 0 is at the bottom with reverseLayout
-                messages.sortByDescending { it.date }
-                
-                if (uniqueNewMsgs.isNotEmpty()) {
-                    page++
-                }
+                withContext(Dispatchers.Main) {
+                    if (isRefresh) {
+                        messages.clear()
+                    }
+                    
+                    if (newMsgs.size < 30) {
+                        canLoadMore = false
+                    }
 
-                // Get all addresses for the conversation if not already set
-                if (phoneNumber.isEmpty()) {
-                    val addresses = repository.getAddressesForThread(threadId)
-                    phoneNumber = addresses.joinToString(", ")
+                    // Add only messages not already in the list to avoid duplicates
+                    val existingIds = messages.map { it.id }.toSet()
+                    val uniqueNewMsgs = newMsgs.filter { !existingIds.contains(it.id) }
+                    messages.addAll(uniqueNewMsgs)
+                    
+                    // Sort newest to oldest so index 0 is at the bottom with reverseLayout
+                    messages.sortByDescending { it.date }
+                    
+                    if (newMsgs.isNotEmpty()) {
+                        page++
+                    }
+
+                    // Get all addresses for the conversation if not already set
+                    if (phoneNumber.isEmpty()) {
+                        val addresses = repository.getAddressesForThread(threadId)
+                        phoneNumber = addresses.joinToString(", ")
+                    }
+                    lastUpdate = System.currentTimeMillis()
                 }
+            } finally {
                 isLoading = false
             }
         }
@@ -414,13 +424,13 @@ fun MessageDetail(
                 loadMessages(isRefresh = true)
             }
         }
-        context.contentResolver.registerContentObserver(
-            Uri.parse("content://mms-sms/"),
-            true,
-            observer
-        )
+        val resolver = context.contentResolver
+        resolver.registerContentObserver(Uri.parse("content://mms-sms/"), true, observer)
+        resolver.registerContentObserver(Uri.parse("content://sms/"), true, observer)
+        resolver.registerContentObserver(Uri.parse("content://mms/"), true, observer)
+        
         onDispose {
-            context.contentResolver.unregisterContentObserver(observer)
+            resolver.unregisterContentObserver(observer)
         }
     }
 
@@ -452,6 +462,14 @@ fun MessageDetail(
             }
 
             val listState = rememberLazyListState()
+            val imeBottom = WindowInsets.ime.getBottom(density)
+
+            // Auto-scroll to bottom (index 0 in reverse layout) when list updates or keyboard opens
+            LaunchedEffect(lastUpdate, imeBottom) {
+                if (messages.isNotEmpty()) {
+                    listState.animateScrollToItem(0)
+                }
+            }
 
             // Load more when reaching the end (top of the list in reverse layout)
             LaunchedEffect(listState) {
@@ -531,6 +549,7 @@ fun MessageDetail(
                     Button(onClick = {
                         if (onSendSms(phoneNumber, messageText, false)) {
                             messageText = ""
+                            loadMessages(isRefresh = true)
                         }
                     }) {
                         Text("Send")

@@ -37,13 +37,13 @@ object MmsUtils {
             }
             
             recipients.forEach { addr ->
-                // Ensure number is clean and use UTF-8 encoding for safety
+                // Ensure number is clean. Standard MMS doesn't usually use UTF-8 for numbers.
                 val cleanAddr = addr.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
-                sendReq.addTo(EncodedStringValue(CharacterSets.UTF_8, cleanAddr.toByteArray()))
+                sendReq.addTo(EncodedStringValue(cleanAddr))
             }
             
             // Standard headers required by many carriers
-            sendReq.from = EncodedStringValue(CharacterSets.UTF_8, "insert-address-token".toByteArray())
+            // Note: We omit FROM in the SendReq PDU so the carrier inserts our number
             sendReq.messageClass = PduHeaders.MESSAGE_CLASS_PERSONAL_STR.toByteArray()
             sendReq.expiry = 60 * 60 * 24 * 7
             sendReq.priority = PduHeaders.PRIORITY_NORMAL
@@ -54,14 +54,16 @@ object MmsUtils {
             sendReq.mmsVersion = PduHeaders.CURRENT_MMS_VERSION
             sendReq.transactionId = ("T" + System.currentTimeMillis().toString(16)).toByteArray()
             
+            // Set Content-Type
+            sendReq.contentType = "application/vnd.wap.multipart.related".toByteArray()
+            
             // For group chats, a subject is often REQUIRED for carriers to treat it as a group
-            // We'll set a subject for ALL MMS messages as it improves delivery success
             val subjectText = if (!bodyText.isNullOrBlank()) {
                 if (bodyText.length > 30) bodyText.take(30) + "..." else bodyText
             } else {
                 "MMS Message"
             }
-            sendReq.subject = EncodedStringValue(CharacterSets.UTF_8, subjectText.toByteArray())
+            sendReq.subject = EncodedStringValue(subjectText)
 
             val body = PduBody()
             

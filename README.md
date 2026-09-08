@@ -5,7 +5,7 @@ communicate with any third party services. Doesn't even need Google Play Service
 
 ## Current Features
 As this app is still well into its early development phase there are currently a lot of missing features.
-As of version 1.3.1 there is:
+As of version 1.4.0 there is:
 * Support for SMS (1.0.0)
 * Support for MMS (1.1.0)
 * Conversation Lists (1.1.0)
@@ -17,6 +17,7 @@ As of version 1.3.1 there is:
 * Seeing unread messages (1.2.0)
 * Deleting conversations (1.3.0)
 * Group conversations (1.3.0)
+* Uses Material 3 throughout (1.4.0)
 
 ## Upcoming Features
 These features are coming soon:

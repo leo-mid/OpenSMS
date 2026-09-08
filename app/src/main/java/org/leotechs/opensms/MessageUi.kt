@@ -7,6 +7,7 @@ import android.database.ContentObserver
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.provider.ContactsContract
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -618,6 +619,11 @@ fun MessageDetail(
                                 text = { Text("Add to Contacts") },
                                 onClick = {
                                     menuExpanded = false
+                                    val intent = Intent(Intent.ACTION_INSERT).apply {
+                                        type = ContactsContract.Contacts.CONTENT_TYPE
+                                        putExtra(ContactsContract.Intents.Insert.PHONE, phoneNumber)
+                                    }
+                                    context.startActivity(intent)
                                 }
                             )
 
@@ -639,6 +645,17 @@ fun MessageDetail(
                                 text = { Text("Edit Contact") },
                                 onClick = {
                                     menuExpanded = false
+                                    scope.launch(Dispatchers.IO) {
+                                        val contactUri = repository.getContactLookupUri(phoneNumber)
+                                        if (contactUri != null) {
+                                            val intent = Intent(Intent.ACTION_EDIT).apply {
+                                                data = contactUri
+                                            }
+                                            withContext(Dispatchers.Main) {
+                                                context.startActivity(intent)
+                                            }
+                                        }
+                                    }
                                 }
                             )
 
@@ -666,16 +683,43 @@ fun MessageDetail(
                             Text(
                                 "Members",
                                 style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                             )
 
                             HorizontalDivider()
 
                             for (contact in repository.getContactsForThread(threadId)) {
+                                val isKnown = contact.name != contact.number
                                 DropdownMenuItem(
-                                    text = { (contact.first ?: contact.second)?.let { Text(it) } },
+                                    text = { Text(contact.name) },
+                                    trailingIcon = {
+                                        Icon(
+                                            if (isKnown) Icons.Default.AccountCircle else Icons.Default.Add,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    },
                                     onClick = {
                                         menuExpanded = false
+                                        if (isKnown) {
+                                            scope.launch(Dispatchers.IO) {
+                                                val contactUri = repository.getContactLookupUri(contact.number)
+                                                if (contactUri != null) {
+                                                    val intent = Intent(Intent.ACTION_EDIT).apply {
+                                                        data = contactUri
+                                                    }
+                                                    withContext(Dispatchers.Main) {
+                                                        context.startActivity(intent)
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            val intent = Intent(Intent.ACTION_INSERT).apply {
+                                                type = ContactsContract.Contacts.CONTENT_TYPE
+                                                putExtra(ContactsContract.Intents.Insert.PHONE, contact.number)
+                                            }
+                                            context.startActivity(intent)
+                                        }
                                     })
                             }
                         }

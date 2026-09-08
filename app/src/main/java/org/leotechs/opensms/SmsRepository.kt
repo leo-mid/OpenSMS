@@ -421,6 +421,39 @@ class SmsRepository(private val context: Context) {
         return Pair(null, null)
     }
 
+    fun getDetailedContact(phoneNumber: String): Contact {
+        val info = getContactInfo(phoneNumber)
+        return Contact(
+            name = info.first ?: phoneNumber,
+            number = phoneNumber,
+            photoUri = info.second
+        )
+    }
+
+    fun getContactLookupUri(phoneNumber: String): Uri? {
+        val uri = Uri.withAppendedPath(
+            ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+            Uri.encode(phoneNumber)
+        )
+        val projection = arrayOf(
+            ContactsContract.PhoneLookup._ID,
+            ContactsContract.PhoneLookup.LOOKUP_KEY
+        )
+
+        try {
+            context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val id = cursor.getLong(0)
+                    val lookupKey = cursor.getString(1)
+                    return ContactsContract.Contacts.getLookupUri(id, lookupKey)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("SmsRepository", "Error getting contact lookup URI", e)
+        }
+        return null
+    }
+
     fun getAddressesForThread(threadId: Long): List<String> {
         val addresses = mutableListOf<String>()
         try {
@@ -751,12 +784,8 @@ class SmsRepository(private val context: Context) {
         }
     }
 
-    fun getContactsForThread(threadId: Long): MutableList<Pair<String?, String?>> {
+    fun getContactsForThread(threadId: Long): List<Contact> {
         val people = getAddressesForThread(threadId)
-        val contact = mutableListOf<Pair<String?, String?>>()
-        people.forEach {
-            contact.add(getContactInfo(it))
-        }
-        return contact
+        return people.map { getDetailedContact(it) }
     }
 }

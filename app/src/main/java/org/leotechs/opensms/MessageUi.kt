@@ -103,7 +103,7 @@ fun ConversationList(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false }
                     ) {
-                        if(isDefault){
+                        if(!isDefault){
                             DropdownMenuItem(
                                 text = { Text("Set as Default SMS App") },
                                 onClick = onRequestDefault

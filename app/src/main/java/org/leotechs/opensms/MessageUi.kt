@@ -495,112 +495,114 @@ fun MessageDetail(
                     modifier = Modifier.padding(start = 8.dp)
                 )
 
+                // Commented out so i can fix the MMS sending and recieving bug
+
                 // Shoves the call & menu button to the right
-                Spacer(modifier = Modifier.weight(1f))
-
-                if (!isGroup){
-                    IconButton(
-                        onClick = {
-                            if (
-                                ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.CALL_PHONE
-                                ) == PackageManager.PERMISSION_GRANTED
-                            ) {
-                                val intent = Intent(Intent.ACTION_CALL).apply {
-                                    data = "tel:$phoneNumber".toUri()
-                                }
-                                context.startActivity(intent)
-                            } else {
-                                callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
-                            }
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Call,
-                            contentDescription = "Call"
-                        )
-                    }
-                }
-
-                Box{
-                    var menuExpanded by remember { mutableStateOf(false) }
-                    IconButton(onClick = { menuExpanded = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "More Options")
-                    }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false }
-                    ) {
-                        // Ex: Unknwon numbers messaging you options (non-group)
-                        if (!isGroup && contactName == null){
-                            DropdownMenuItem(
-                                text = { Text("Add to Contacts") },
-                                onClick = {
-                                    menuExpanded = false
-                                }
-                            )
-
-                            DropdownMenuItem(
-                                text = { Text("Send Encrypted SMS") },
-                                onClick = {
-                                    menuExpanded = false
-                                }
-                            )
-
-                            DropdownMenuItem(
-                                text = { Text("Block Number") },
-                                onClick = {
-                                    menuExpanded = false
-                                }
-                            )
-                        } else if (!isGroup){ // Ex: Someone saved in your phone (non-group)
-                            DropdownMenuItem(
-                                text = { Text("Edit Contact") },
-                                onClick = {
-                                    menuExpanded = false
-                                }
-                            )
-
-                            DropdownMenuItem(
-                                text = { Text("Send Encrypted SMS") },
-                                onClick = {
-                                    menuExpanded = false
-                                }
-                            )
-
-                            DropdownMenuItem(
-                                text = { Text("Block Number") },
-                                onClick = {
-                                    menuExpanded = false
-                                }
-                            )
-                        } else { // Ex: Group conversation
-                            DropdownMenuItem(
-                                text = { Text("Send Encrypted SMS") },
-                                onClick = {
-                                    menuExpanded = false
-                                }
-                            )
-
-                            Text(
-                                "Members",
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
-                            )
-
-                            HorizontalDivider()
-
-                            for (contact in repository.getContactsForThread(threadId)) {
-                                DropdownMenuItem(
-                                    text = { (contact.first ?: contact.second)?.let { Text(it) } },
-                                    onClick = {
-                                        menuExpanded = false
-                                    })
-                            }
-                        }
-                    }
-                }
+//                Spacer(modifier = Modifier.weight(1f))
+//
+//                if (!isGroup){
+//                    IconButton(
+//                        onClick = {
+//                            if (
+//                                ContextCompat.checkSelfPermission(
+//                                    context,
+//                                    Manifest.permission.CALL_PHONE
+//                                ) == PackageManager.PERMISSION_GRANTED
+//                            ) {
+//                                val intent = Intent(Intent.ACTION_CALL).apply {
+//                                    data = "tel:$phoneNumber".toUri()
+//                                }
+//                                context.startActivity(intent)
+//                            } else {
+//                                callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
+//                            }
+//                        }
+//                    ) {
+//                        Icon(
+//                            imageVector = Icons.Default.Call,
+//                            contentDescription = "Call"
+//                        )
+//                    }
+//                }
+//
+//                Box{
+//                    var menuExpanded by remember { mutableStateOf(false) }
+//                    IconButton(onClick = { menuExpanded = true }) {
+//                        Icon(Icons.Filled.MoreVert, contentDescription = "More Options")
+//                    }
+//                    DropdownMenu(
+//                        expanded = menuExpanded,
+//                        onDismissRequest = { menuExpanded = false }
+//                    ) {
+//                        // Ex: Unknwon numbers messaging you options (non-group)
+//                        if (!isGroup && contactName == null){
+//                            DropdownMenuItem(
+//                                text = { Text("Add to Contacts") },
+//                                onClick = {
+//                                    menuExpanded = false
+//                                }
+//                            )
+//
+//                            DropdownMenuItem(
+//                                text = { Text("Send Encrypted SMS") },
+//                                onClick = {
+//                                    menuExpanded = false
+//                                }
+//                            )
+//
+//                            DropdownMenuItem(
+//                                text = { Text("Block Number") },
+//                                onClick = {
+//                                    menuExpanded = false
+//                                }
+//                            )
+//                        } else if (!isGroup){ // Ex: Someone saved in your phone (non-group)
+//                            DropdownMenuItem(
+//                                text = { Text("Edit Contact") },
+//                                onClick = {
+//                                    menuExpanded = false
+//                                }
+//                            )
+//
+//                            DropdownMenuItem(
+//                                text = { Text("Send Encrypted SMS") },
+//                                onClick = {
+//                                    menuExpanded = false
+//                                }
+//                            )
+//
+//                            DropdownMenuItem(
+//                                text = { Text("Block Number") },
+//                                onClick = {
+//                                    menuExpanded = false
+//                                }
+//                            )
+//                        } else { // Ex: Group conversation
+//                            DropdownMenuItem(
+//                                text = { Text("Send Encrypted SMS") },
+//                                onClick = {
+//                                    menuExpanded = false
+//                                }
+//                            )
+//
+//                            Text(
+//                                "Members",
+//                                style = MaterialTheme.typography.labelMedium,
+//                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+//                            )
+//
+//                            HorizontalDivider()
+//
+//                            for (contact in repository.getContactsForThread(threadId)) {
+//                                DropdownMenuItem(
+//                                    text = { (contact.first ?: contact.second)?.let { Text(it) } },
+//                                    onClick = {
+//                                        menuExpanded = false
+//                                    })
+//                            }
+//                        }
+//                    }
+//                }
             }
 
             val listState = rememberLazyListState()

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.*
@@ -70,17 +71,50 @@ fun ConversationList(
     viewModel: ConversationViewModel = viewModel()
 ) {
     val conversations by viewModel.conversations.collectAsState()
+    var menuExpanded by remember { mutableStateOf(false) }
 
     Box(modifier = modifier) {
         // Top view of the conversation list
         Column(modifier = Modifier.fillMaxSize()) {
-            Text(
-                text = "Messages",
-                style = MaterialTheme.typography.headlineLarge,
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(16.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Messages",
+                    style = MaterialTheme.typography.headlineLarge,
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(16.dp)
+                )
+
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        if(isDefault){
+                            DropdownMenuItem(
+                                text = { Text("Set as Default SMS App") },
+                                onClick = onRequestDefault
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text("Settings") },
+                            onClick = { menuExpanded = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("About") },
+                            onClick = { menuExpanded = false }
+                        )
+                    }
+                }
+            }
+
             if (!isDefault) {
                 Button(
                     onClick = onRequestDefault,

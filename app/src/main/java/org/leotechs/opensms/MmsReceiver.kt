@@ -23,6 +23,13 @@ class MmsReceiver : BroadcastReceiver() {
                 val pdu = PduParser(data).parse()
                 if (pdu is NotificationInd) {
                     val from = pdu.from?.string ?: "Unknown"
+                    
+                    val repository = SmsRepository(context)
+                    if (repository.isBlocked(from)) {
+                        Log.d("MmsReceiver", "Blocked MMS from $from")
+                        return
+                    }
+
                     val contentLocation = pdu.contentLocation?.let { String(it) } ?: ""
                     
                     Log.d("MmsReceiver", "MMS notification from $from, loc: $contentLocation")

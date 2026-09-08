@@ -12,10 +12,17 @@ class SmsReceiver : BroadcastReceiver() {
             val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
             for (sms in messages) {
                 val body = sms.displayMessageBody
-                val sender = sms.displayOriginatingAddress
+                val sender = sms.displayOriginatingAddress ?: continue
+                
+                val repository = SmsRepository(context)
+                
+                // Check if number is blocked
+                if (repository.isBlocked(sender)) {
+                    Log.d("SmsReceiver", "Blocked SMS from $sender")
+                    continue
+                }
                 
                 // Save to system database
-                val repository = SmsRepository(context)
                 val threadId = repository.getOrCreateThreadId(sender)
                 repository.saveReceivedSms(sender, body)
                 

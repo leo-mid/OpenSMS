@@ -154,6 +154,11 @@ class MainActivity : ComponentActivity() {
             val repository = SmsRepository(this)
             val isGroup = phoneNumber.contains(",")
 
+            if (repository.isBlocked(phoneNumber)){
+                Toast.makeText(this, "This number is blocked.", Toast.LENGTH_LONG).show()
+                return false
+            }
+
             // Apparently group chats only work in MMS
             if (isGroup) {
                 return sendMms(phoneNumber, null, message)
@@ -184,6 +189,11 @@ class MainActivity : ComponentActivity() {
         try {
             val repository = SmsRepository(this)
             val threadId = repository.getOrCreateThreadId(phoneNumber)
+
+            if (repository.isBlocked(phoneNumber)){
+                Toast.makeText(this, "This number is blocked.", Toast.LENGTH_LONG).show()
+                return false
+            }
 
             // 1. Save to database first in OUTBOX
             val mmsId = repository.saveSentMms(phoneNumber, uri, bodyText, threadId)

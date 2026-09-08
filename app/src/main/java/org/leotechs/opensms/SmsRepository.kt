@@ -3,6 +3,7 @@ package org.leotechs.opensms
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
+import android.provider.BlockedNumberContract
 import android.provider.ContactsContract
 import android.provider.Telephony
 import android.util.Log
@@ -786,6 +787,38 @@ class SmsRepository(private val context: Context) {
             )
         } catch (e: Exception) {
             Log.e("SmsRepository", "Error deleting conversation:" + e.message)
+        }
+    }
+
+    fun blockNumber(phoneNumber: String) {
+        val values = ContentValues().apply {
+            put(BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER, phoneNumber)
+        }
+        try {
+            context.contentResolver.insert(BlockedNumberContract.BlockedNumbers.CONTENT_URI, values)
+            Log.d("SmsRepository", "Blocked number: $phoneNumber")
+        } catch (e: Exception) {
+            Log.e("SmsRepository", "Error blocking number: $phoneNumber", e)
+        }
+    }
+
+    fun unblockNumber(phoneNumber: String) {
+        try {
+            val selection = "${BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER} = ?"
+            val selectionArgs = arrayOf(phoneNumber)
+            context.contentResolver.delete(BlockedNumberContract.BlockedNumbers.CONTENT_URI, selection, selectionArgs)
+            Log.d("SmsRepository", "Unblocked number: $phoneNumber")
+        } catch (e: Exception) {
+            Log.e("SmsRepository", "Error unblocking number: $phoneNumber", e)
+        }
+    }
+
+    fun isBlocked(phoneNumber: String): Boolean {
+        return try {
+            BlockedNumberContract.isBlocked(context, phoneNumber)
+        } catch (e: Exception) {
+            Log.e("SmsRepository", "Error checking if blocked: $phoneNumber", e)
+            false
         }
     }
 

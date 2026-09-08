@@ -423,6 +423,16 @@ fun MessageDetail(
 
     // Media Handling
     var tempImageUri by remember { mutableStateOf<Uri?>(null) }
+    var isBlocked by remember(phoneNumber) { mutableStateOf(false) }
+    var showBlockDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(phoneNumber) {
+        if (!isGroup && phoneNumber.isNotEmpty()) {
+            withContext(Dispatchers.IO) {
+                isBlocked = repository.isBlocked(phoneNumber)
+            }
+        }
+    }
 
     // Controls the camera actions
     val cameraLauncher = rememberLauncherForActivityResult(
@@ -453,6 +463,38 @@ fun MessageDetail(
     }
 
     BackHandler(onBack = onBack)
+
+    if (showBlockDialog) {
+        AlertDialog(
+            onDismissRequest = { showBlockDialog = false },
+            title = { Text(if (isBlocked) "Unblock Number" else "Block Number") },
+            text = { Text(if (isBlocked) "Are you sure you want to unblock $phoneNumber?" else "Are you sure you want to block $phoneNumber? You will no longer receive messages from this number.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch(Dispatchers.IO) {
+                            if (isBlocked) {
+                                repository.unblockNumber(phoneNumber)
+                            } else {
+                                repository.blockNumber(phoneNumber)
+                            }
+                            isBlocked = !isBlocked
+                            withContext(Dispatchers.Main) {
+                                showBlockDialog = false
+                            }
+                        }
+                    }
+                ) {
+                    Text(if (isBlocked) "Unblock" else "Block")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBlockDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     fun loadMessages(isRefresh: Boolean = false) {
         if (isRefresh) {
@@ -642,9 +684,10 @@ fun MessageDetail(
                             )
 
                             DropdownMenuItem(
-                                text = { Text("Block Number") },
+                                text = { Text(if (isBlocked) "Unblock Number" else "Block Number") },
                                 onClick = {
                                     menuExpanded = false
+                                    showBlockDialog = true
                                 }
                             )
                         } else if (!isGroup){ // Ex: Someone saved in your phone (non-group)
@@ -674,9 +717,10 @@ fun MessageDetail(
                             )
 
                             DropdownMenuItem(
-                                text = { Text("Block Number") },
+                                text = { Text(if (isBlocked) "Unblock Number" else "Block Number") },
                                 onClick = {
                                     menuExpanded = false
+                                    showBlockDialog = true
                                 }
                             )
                         } else { // Ex: Group conversation

@@ -159,19 +159,19 @@ class MainActivity : ComponentActivity() {
                 return false
             }
 
-            // Apparently group chats only work in MMS
-            if (isGroup) {
-                return sendMms(phoneNumber, null, message)
-            }
-
-            val smsManager =
-                this.getSystemService(SmsManager::class.java)
-
             val finalMessage = if (encrypt) {
                 "[ENC]${CryptoUtils.encrypt(message)}"
             } else {
                 message
             }
+
+            // Apparently group chats only work in MMS
+            if (isGroup) {
+                return sendMms(phoneNumber, null, finalMessage)
+            }
+
+            val smsManager =
+                this.getSystemService(SmsManager::class.java)
 
             val threadId = repository.getOrCreateThreadId(phoneNumber)
 

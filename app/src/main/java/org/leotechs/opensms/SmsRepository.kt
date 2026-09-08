@@ -235,6 +235,14 @@ class SmsRepository(private val context: Context) {
                     if (date in 1..<1000000000000L) date *= 1000
 
                     val mmsMedia = getMmsMedia(id)
+                    val body = mmsMedia?.first ?: ""
+                    val isEncrypted = body.startsWith("[ENC]")
+                    val displayBody = if (isEncrypted) {
+                        try {
+                            "[Decrypted] " + CryptoUtils.decrypt(body.substring(5))
+                        } catch (_: Exception) { body }
+                    } else body
+
                     // Treat anything not in the INBOX as a "Sent" message from the user's perspective
                     val isSent = msgBox != 1 
                     val otherPartyAddress = if (!isSent) getMmsAddress(id, 137) else getMmsAddress(id, 151)
@@ -243,10 +251,10 @@ class SmsRepository(private val context: Context) {
                         Message(
                             id = "mms_$id",
                             address = otherPartyAddress ?: "Unknown",
-                            body = mmsMedia?.first ?: "",
+                            body = displayBody,
                             date = date,
                             type = if (isSent) 2 else 1,
-                            isEncrypted = false,
+                            isEncrypted = isEncrypted,
                             isMms = true,
                             mediaUri = mmsMedia?.second,
                             mediaContentType = mmsMedia?.third,

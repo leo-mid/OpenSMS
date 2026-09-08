@@ -53,11 +53,8 @@ class SmsRepository(private val context: Context) {
                         if (date in 1..<1000000000000L) date *= 1000
 
                         // Optimization: Determine if last message was MMS using pre-fetched data
-                        val mmsData = lastMmsInfo[threadId]
-                        if (mmsData != null) {
-                            val (mmsId, mmsDate) = mmsData
-                            // If MMS date matches the conversation date (within 2s buffer for precision)
-                            if (abs(mmsDate - date) < 2000) {
+                        lastMmsInfo[threadId]?.let { (mmsId, mmsDate) ->
+                            if (abs(mmsDate - date) < 10000) {
                                 val count = attachmentCounts[mmsId] ?: 0
                                 // If snippet is empty, it's likely a media-only MMS
                                 if (snippet.isBlank() || count > 0) {
@@ -335,7 +332,7 @@ class SmsRepository(private val context: Context) {
                     val threadId = it.getLong(threadIdIdx)
                     if (!map.containsKey(threadId)) {
                         var date = it.getLong(dateIdx)
-                        if (date > 0 && date < 1000000000000L) date *= 1000
+                        if (date in 1..<1000000000000L) date *= 1000
                         map[threadId] = Pair(it.getLong(idIdx), date)
                     }
                 }

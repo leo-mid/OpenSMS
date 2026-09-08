@@ -229,7 +229,9 @@ class SmsRepository(private val context: Context) {
                     if (date in 1..<1000000000000L) date *= 1000
 
                     val mmsMedia = getMmsMedia(id)
-                    val otherPartyAddress = if (msgBox == 1) getMmsAddress(id, 137) else getMmsAddress(id, 151)
+                    // Treat anything not in the INBOX as a "Sent" message from the user's perspective
+                    val isSent = msgBox != 1 
+                    val otherPartyAddress = if (!isSent) getMmsAddress(id, 137) else getMmsAddress(id, 151)
 
                     messages.add(
                         Message(
@@ -237,12 +239,12 @@ class SmsRepository(private val context: Context) {
                             address = otherPartyAddress ?: "Unknown",
                             body = mmsMedia?.first ?: "",
                             date = date,
-                            type = if (msgBox == 2) 2 else 1,
+                            type = if (isSent) 2 else 1,
                             isEncrypted = false,
                             isMms = true,
                             mediaUri = mmsMedia?.second,
                             mediaContentType = mmsMedia?.third,
-                            senderAddress = if (msgBox == 1) getMmsAddress(id, 137) else null
+                            senderAddress = if (!isSent) getMmsAddress(id, 137) else null
                         )
                     )
                 }
@@ -536,14 +538,14 @@ class SmsRepository(private val context: Context) {
         }
     }
 
-    fun saveSentMms(address: String, mediaUri: Uri?, bodyText: String? = null, threadId: Long? = null) {
+    fun saveSentMms(address: String, mediaUri: Uri?, bodyText: String? = null, threadId: Long? = null): Long {
         try {
             val finalThreadId = threadId ?: getOrCreateThreadId(address)
 
             // 1. Insert MMS header
             val values = ContentValues().apply {
                 put(Telephony.Mms.THREAD_ID, finalThreadId)
-                put(Telephony.Mms.MESSAGE_BOX, Telephony.Mms.MESSAGE_BOX_SENT)
+                put(Telephony.Mms.MESSAGE_BOX, Telephony.Mms.MESSAGE_BOX_OUTBOX) // Set to OUTBOX until sent
                 put(Telephony.Mms.DATE, System.currentTimeMillis() / 1000)
                 put(Telephony.Mms.READ, 1)
                 put(Telephony.Mms.MESSAGE_TYPE, 128) // m-send-req
@@ -555,9 +557,10 @@ class SmsRepository(private val context: Context) {
             val mmsUri = context.contentResolver.insert(Telephony.Mms.CONTENT_URI, values)
             if (mmsUri == null) {
                 Log.e("SmsRepository", "Failed to insert MMS header")
-                return
+                return -1L
             }
-            val mmsId = mmsUri.lastPathSegment
+            val mmsId = mmsUri.lastPathSegment?.toLongOrNull() ?: -1L
+            val mmsIdStr = mmsId.toString()
 
             // 2. Insert recipient addresses
             address.split(",").map { it.trim() }.forEach { addr ->
@@ -566,7 +569,7 @@ class SmsRepository(private val context: Context) {
                     put("type", 151) // PDU_ADDR_TYPE_TO
                     put("charset", 106) // UTF-8
                 }
-                context.contentResolver.insert("content://mms/$mmsId/addr".toUri(), addrValues)
+                context.contentResolver.insert("content://mms/$mmsIdStr/addr".toUri(), addrValues)
             }
 
             // 2b. Insert "insert-address-token" as the FROM address locally to help system grouping
@@ -575,7 +578,7 @@ class SmsRepository(private val context: Context) {
                 put("type", 137) // PDU_ADDR_TYPE_FROM
                 put("charset", 106)
             }
-            context.contentResolver.insert("content://mms/$mmsId/addr".toUri(), fromValues)
+            context.contentResolver.insert("content://mms/$mmsIdStr/addr".toUri(), fromValues)
 
             // 3. Insert text part if present
             if (bodyText != null) {
@@ -583,7 +586,7 @@ class SmsRepository(private val context: Context) {
                     put("ct", "text/plain")
                     put("text", bodyText)
                 }
-                context.contentResolver.insert("content://mms/$mmsId/part".toUri(), textValues)
+                context.contentResolver.insert("content://mms/$mmsIdStr/part".toUri(), textValues)
             }
 
             // 4. Insert media part if present
@@ -593,7 +596,7 @@ class SmsRepository(private val context: Context) {
                     put("name", "media")
                     put("cl", "media")
                 }
-                val partUri = context.contentResolver.insert("content://mms/$mmsId/part".toUri(), partValues)
+                val partUri = context.contentResolver.insert("content://mms/$mmsIdStr/part".toUri(), partValues)
                 if (partUri != null) {
                     context.contentResolver.openOutputStream(partUri)?.use { out ->
                         context.contentResolver.openInputStream(mediaUri)?.use { it.copyTo(out) }
@@ -602,8 +605,10 @@ class SmsRepository(private val context: Context) {
             }
 
             Log.d("SmsRepository", "Successfully saved sent MMS to system database: $mmsUri")
+            return mmsId
         } catch (e: Exception) {
             Log.e("SmsRepository", "Error saving sent MMS", e)
+            return -1L
         }
     }
 
@@ -682,6 +687,23 @@ class SmsRepository(private val context: Context) {
             }
         }
         return null
+    }
+
+    fun updateMmsBox(mmsId: Long, box: Int) {
+        val values = ContentValues().apply {
+            put(Telephony.Mms.MESSAGE_BOX, box)
+        }
+        try {
+            context.contentResolver.update(
+                "content://mms/$mmsId".toUri(),
+                values,
+                null,
+                null
+            )
+            Log.d("SmsRepository", "Updated MMS $mmsId to box $box")
+        } catch (e: Exception) {
+            Log.e("SmsRepository", "Error updating MMS box", e)
+        }
     }
 
     fun markAsRead(threadId: Long) {

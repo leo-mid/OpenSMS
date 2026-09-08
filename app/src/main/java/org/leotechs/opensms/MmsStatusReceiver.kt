@@ -16,11 +16,18 @@ class MmsStatusReceiver : BroadcastReceiver() {
 
         if (MmsUtils.ACTION_MMS_SENT == action) {
             val resultCode = resultCode
-            Log.d("MmsStatusReceiver", "MMS Sent Result Code: $resultCode")
-            if (resultCode == Activity.RESULT_OK) {
-                Log.d("MmsStatusReceiver", "MMS sent successfully")
-            } else {
-                Log.e("MmsStatusReceiver", "MMS send failed")
+            val mmsId = intent.getLongExtra("mms_id", -1L)
+            Log.d("MmsStatusReceiver", "MMS Sent Result Code: $resultCode, ID: $mmsId")
+            
+            if (mmsId != -1L) {
+                if (resultCode == Activity.RESULT_OK) {
+                    Log.d("MmsStatusReceiver", "MMS sent successfully, moving to SENT box")
+                    SmsRepository(context).updateMmsBox(mmsId, 2) // MESSAGE_BOX_SENT
+                } else {
+                    Log.e("MmsStatusReceiver", "MMS send failed, box remains OUTBOX or marked as failed")
+                    // You could also move to a FAILED box if desired: Telephony.Mms.MESSAGE_BOX_FAILED (5)
+                    SmsRepository(context).updateMmsBox(mmsId, 5)
+                }
             }
         } else if (MmsUtils.ACTION_MMS_DOWNLOADED == action) {
             val resultCode = resultCode

@@ -328,14 +328,14 @@ fun MessageDetail(
 ) {
     val context = LocalContext.current
     val repository = remember { SmsRepository(context) }
-    val messages = remember { mutableStateListOf<Message>() }
-    var phoneNumber by remember { mutableStateOf("") }
-    var messageText by remember { mutableStateOf("") }
-    var page by remember { mutableStateOf(0) }
-    var canLoadMore by remember { mutableStateOf(true) }
-    var isLoading by remember { mutableStateOf(false) }
-    var loadJob by remember { mutableStateOf<Job?>(null) }
-    var lastUpdate by remember { mutableStateOf(0L) }
+    val messages = remember(threadId) { mutableStateListOf<Message>() }
+    var phoneNumber by remember(threadId) { mutableStateOf("") }
+    var messageText by remember(threadId) { mutableStateOf("") }
+    var page by remember(threadId) { mutableIntStateOf(0) }
+    var canLoadMore by remember(threadId) { mutableStateOf(true) }
+    var isLoading by remember(threadId) { mutableStateOf(false) }
+    var loadJob by remember(threadId) { mutableStateOf<Job?>(null) }
+    var lastUpdate by remember(threadId) { mutableLongStateOf(0L) }
     val scope = rememberCoroutineScope()
     val isGroup = phoneNumber.contains(",")
 

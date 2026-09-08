@@ -4,6 +4,7 @@ import android.app.Application
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
+import android.provider.ContactsContract
 import android.util.Log
 import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
@@ -33,6 +34,7 @@ class ConversationViewModel(application: Application) : AndroidViewModel(applica
         resolver.registerContentObserver("content://mms-sms/".toUri(), true, observer)
         resolver.registerContentObserver("content://sms/".toUri(), true, observer)
         resolver.registerContentObserver("content://mms/".toUri(), true, observer)
+        resolver.registerContentObserver(ContactsContract.Contacts.CONTENT_URI, true, observer)
         refresh()
     }
 
@@ -40,6 +42,8 @@ class ConversationViewModel(application: Application) : AndroidViewModel(applica
         viewModelScope.launch(Dispatchers.IO) {
             _isRefreshing.value = true
             try {
+                // Clear cache on contact change or refresh
+                repository.clearContactCache()
                 val newConversations = repository.getConversations()
                 _conversations.value = newConversations
             } finally {

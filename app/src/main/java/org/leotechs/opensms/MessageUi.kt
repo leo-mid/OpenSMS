@@ -411,6 +411,7 @@ fun MessageDetail(
     val repository = remember { SmsRepository(context) }
     val messages = remember(threadId) { mutableStateListOf<Message>() }
     var phoneNumber by remember(threadId) { mutableStateOf("") }
+    var displayName by remember(threadId) { mutableStateOf(contactName) }
     var messageText by remember(threadId) { mutableStateOf("") }
     var page by remember(threadId) { mutableIntStateOf(0) }
     var canLoadMore by remember(threadId) { mutableStateOf(true) }
@@ -466,6 +467,7 @@ fun MessageDetail(
                 if (isRefresh) {
                     page = 0
                     canLoadMore = true
+                    repository.clearContactCache()
                 }
 
                 val newMsgs = repository.getMessages(threadId, limit = 30, offset = page * 30)
@@ -509,6 +511,10 @@ fun MessageDetail(
                         val addresses = repository.getAddressesForThread(threadId)
                         phoneNumber = addresses.joinToString(", ")
                     }
+
+                    // Refresh display name
+                    displayName = repository.getThreadName(threadId)
+
                     lastUpdate = System.currentTimeMillis()
                 }
             } finally {
@@ -532,6 +538,7 @@ fun MessageDetail(
         resolver.registerContentObserver("content://mms-sms/".toUri(), true, observer)
         resolver.registerContentObserver("content://sms/".toUri(), true, observer)
         resolver.registerContentObserver("content://mms/".toUri(), true, observer)
+        resolver.registerContentObserver(ContactsContract.Contacts.CONTENT_URI, true, observer)
         
         onDispose {
             resolver.unregisterContentObserver(observer)
@@ -571,7 +578,7 @@ fun MessageDetail(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                 }
                 Text(
-                    text = contactName ?: phoneNumber,
+                    text = displayName ?: phoneNumber,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 8.dp)
                 )
@@ -693,11 +700,21 @@ fun MessageDetail(
                                 DropdownMenuItem(
                                     text = { Text(contact.name) },
                                     trailingIcon = {
-                                        Icon(
-                                            if (isKnown) Icons.Default.AccountCircle else Icons.Default.Add,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
-                                        )
+                                        if (isKnown && contact.photoUri != null) {
+                                            AsyncImage(
+                                                model = contact.photoUri,
+                                                contentDescription = null,
+                                                modifier = Modifier
+                                                    .size(18.dp)
+                                                    .clip(CircleShape)
+                                            )
+                                        } else {
+                                            Icon(
+                                                if (isKnown) Icons.Default.AccountCircle else Icons.Default.Add,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
                                     },
                                     onClick = {
                                         menuExpanded = false

@@ -15,6 +15,11 @@ class SmsRepository(private val context: Context) {
     private val contactCache = mutableMapOf<String, Pair<String?, String?>>()
     private val canonicalAddressCache = mutableMapOf<Long, String>()
 
+    fun clearContactCache() {
+        contactCache.clear()
+        canonicalAddressCache.clear()
+    }
+
     fun getConversations(): List<Conversation> {
         val conversations = mutableListOf<Conversation>()
         

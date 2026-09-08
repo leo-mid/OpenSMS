@@ -4,6 +4,7 @@ import android.app.Application
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
+import android.provider.BlockedNumberContract
 import android.provider.ContactsContract
 import android.util.Log
 import androidx.core.net.toUri
@@ -35,6 +36,7 @@ class ConversationViewModel(application: Application) : AndroidViewModel(applica
         resolver.registerContentObserver("content://sms/".toUri(), true, observer)
         resolver.registerContentObserver("content://mms/".toUri(), true, observer)
         resolver.registerContentObserver(ContactsContract.Contacts.CONTENT_URI, true, observer)
+        resolver.registerContentObserver(BlockedNumberContract.BlockedNumbers.CONTENT_URI, true, observer)
         refresh()
     }
 

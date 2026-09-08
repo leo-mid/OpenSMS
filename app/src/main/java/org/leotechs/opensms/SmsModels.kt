@@ -12,6 +12,7 @@ data class Conversation(
     val isEncrypted: Boolean,
     val isRead: Boolean = true,
     val isGroup: Boolean = false,
+    val isBlocked: Boolean = false,
     val addresses: List<String> = emptyList()
 )
 

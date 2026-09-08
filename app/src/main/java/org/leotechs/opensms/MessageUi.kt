@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -245,10 +246,22 @@ fun ConversationItem(conversation: Conversation, onClick: () -> Unit) {
         modifier = Modifier.clickable { onClick() },
         // Contact Name / Phone Number
         headlineContent = {
-            Text(
-                text = conversation.contactName ?: conversation.address,
-                fontWeight = if (conversation.isRead) FontWeight.Normal else FontWeight.Bold
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = conversation.contactName ?: conversation.address,
+                    fontWeight = if (conversation.isRead) FontWeight.Normal else FontWeight.Bold,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (conversation.isBlocked) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Default.Cancel,
+                        contentDescription = "Blocked",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
         },
         // Message Preview
         supportingContent = {

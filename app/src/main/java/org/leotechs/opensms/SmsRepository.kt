@@ -113,6 +113,8 @@ class SmsRepository(private val context: Context) {
                             snippet
                         }
 
+                        val isBlocked = !isGroup && isBlocked(displayAddress)
+
                         conversations.add(
                             Conversation(
                                 threadId = threadId,
@@ -124,6 +126,7 @@ class SmsRepository(private val context: Context) {
                                 isEncrypted = isEncrypted,
                                 isRead = isRead,
                                 isGroup = isGroup,
+                                isBlocked = isBlocked,
                                 addresses = addresses
                             )
                         )

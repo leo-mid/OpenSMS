@@ -18,6 +18,7 @@ As of version 1.4.0 there is:
 * Deleting conversations (1.3.0)
 * Group conversations (1.3.0)
 * Uses Material 3 throughout (1.4.0)
+* Start a call via the app (Using default calling app) (1.4.0)
 
 ## Upcoming Features
 These features are coming soon:
@@ -26,7 +27,6 @@ These features are coming soon:
 * Message actions such as saving MMS to device
 * Enabling Encrypted SMS (Would only work if both/everyone has this app)
 * Blocking Numbers
-* Start a call via the app (Using default calling app)
 * Message Reactions
 
 ## Permissions
@@ -39,7 +39,7 @@ The app needs the following permissions to function:
 
 ## How to Install
 ### Method 1: APK
-All the different versions APKS are provided in this github in the [releases](https://github.com/leo-mid/OpenSMS/releases)
+All the different versions APKS are provided in this GitHub in the [releases](https://github.com/leo-mid/OpenSMS/releases)
 menu.
 * Download the APK file
 * Then install it!

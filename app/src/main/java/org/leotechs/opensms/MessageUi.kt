@@ -607,6 +607,15 @@ fun MessageDetail(
                     modifier = Modifier.padding(start = 8.dp)
                 )
 
+                if (isBlocked){
+                    Icon(
+                        imageVector = Icons.Default.Cancel,
+                        contentDescription = "Blocked",
+                        modifier = Modifier.padding(start = 4.dp).size(16.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+
                 if (isEncryptionEnabled) {
                     Icon(
                         imageVector = Icons.Default.Lock,

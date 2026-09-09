@@ -681,24 +681,13 @@ fun MessageDetail(
                 Box{
                     var menuExpanded by remember { mutableStateOf(false) }
                     IconButton(onClick = { menuExpanded = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "More Options")
+                        Icon(Icons.Default.MoreVert, contentDescription = "More Options")
                     }
                     DropdownMenu(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false }
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("Share Encryption Key") },
-                            onClick = {
-                                menuExpanded = false
-                                val myKey = CryptoUtils.getLocalPublicKeyBase64()
-                                onSendSms(phoneNumber, "[KEY]$myKey", false)
-                                Toast.makeText(context, "Public key sent!", Toast.LENGTH_SHORT).show()
-                            }
-                        )
-
-                        // Ex: Unknwon numbers messaging you options (non-group)
-                        if (!isGroup && contactName == null){
+                        if (!isGroup && contactName == null) {
                             DropdownMenuItem(
                                 text = { Text("Add to Contacts") },
                                 onClick = {
@@ -710,30 +699,7 @@ fun MessageDetail(
                                     context.startActivity(intent)
                                 }
                             )
-
-                            DropdownMenuItem(
-                                text = {
-                                    if(isEncryptionEnabled){
-                                        Text("Conversation Encrypted")
-                                    } else
-                                        Text("Unencrypt Conversation")
-                                },
-                                onClick = {
-                                    val newState = !isEncryptionEnabled
-                                    isEncryptionEnabled = newState
-                                    KeyRepository(context).setEncryptionEnabled(threadId, newState)
-                                    menuExpanded = false
-                                }
-                            )
-
-                            DropdownMenuItem(
-                                text = { Text(if (isBlocked) "Unblock Number" else "Block Number") },
-                                onClick = {
-                                    menuExpanded = false
-                                    showBlockDialog = true
-                                }
-                            )
-                        } else if (!isGroup){ // Ex: Someone saved in your phone (non-group)
+                        } else {
                             DropdownMenuItem(
                                 text = { Text("Edit Contact") },
                                 onClick = {
@@ -751,13 +717,22 @@ fun MessageDetail(
                                     }
                                 }
                             )
-
+                        }
+                        DropdownMenuItem(
+                            text = { Text("Share Encryption Key") },
+                            onClick = {
+                                menuExpanded = false
+                                val myKey = CryptoUtils.getLocalPublicKeyBase64()
+                                onSendSms(phoneNumber, "[KEY]$myKey", false)
+                                Toast.makeText(context, "Public key sent!", Toast.LENGTH_SHORT).show()
+                            }
+                        )
                         DropdownMenuItem(
                             text = {
                                 if(isEncryptionEnabled){
-                                    Text("Conversation Encrypted")
-                                } else
                                     Text("Unencrypt Conversation")
+                                } else
+                                    Text("Encrypt Conversation")
                             },
                             onClick = {
                                 val newState = !isEncryptionEnabled
@@ -766,7 +741,7 @@ fun MessageDetail(
                                 menuExpanded = false
                             }
                         )
-
+                        if(!isGroup){
                             DropdownMenuItem(
                                 text = { Text(if (isBlocked) "Unblock Number" else "Block Number") },
                                 onClick = {
@@ -774,26 +749,11 @@ fun MessageDetail(
                                     showBlockDialog = true
                                 }
                             )
-                        } else { // Ex: Group conversation
-                            DropdownMenuItem(
-                                text = {
-                                    if(isEncryptionEnabled){
-                                        Text("Conversation Encrypted")
-                                    } else
-                                        Text("Unencrypt Conversation")
-                                },
-                                onClick = {
-                                    val newState = !isEncryptionEnabled
-                                    isEncryptionEnabled = newState
-                                    KeyRepository(context).setEncryptionEnabled(threadId, newState)
-                                    menuExpanded = false
-                                }
-                            )
-
+                        } else {
                             Text(
                                 "Members",
                                 style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                             )
 
                             HorizontalDivider()
@@ -840,7 +800,8 @@ fun MessageDetail(
                                             }
                                             context.startActivity(intent)
                                         }
-                                    })
+                                    }
+                                )
                             }
                         }
                     }

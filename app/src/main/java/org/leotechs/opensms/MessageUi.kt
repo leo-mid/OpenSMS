@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayCircle
+import android.widget.Toast
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -675,6 +676,17 @@ fun MessageDetail(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false }
                     ) {
+                        DropdownMenuItem(
+                            text = { Text("Share Encryption Key") },
+                            onClick = {
+                                menuExpanded = false
+                                val myKey = CryptoUtils.getLocalPublicKeyBase64()
+                                onSendSms(phoneNumber, "[KEY]$myKey", false)
+                                Toast.makeText(context, "Public key sent!", Toast.LENGTH_SHORT).show()
+                            }
+                            // leadingIcon = { Icon(Icons.Default.VpnKey, contentDescription = null) }
+                        )
+
                         // Ex: Unknwon numbers messaging you options (non-group)
                         if (!isGroup && contactName == null){
                             DropdownMenuItem(

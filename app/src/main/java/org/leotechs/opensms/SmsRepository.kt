@@ -103,14 +103,16 @@ class SmsRepository(private val context: Context) {
                         val contactPhotoUri = if (isGroup) null else contactInfos.firstOrNull()?.second
 
                         val isEncrypted = snippet.startsWith("[ENC]")
-                        val displaySnippet = if (isEncrypted) {
-                            try {
-                                "[Decrypted] " + CryptoUtils.decrypt(snippet.substring(5))
-                            } catch (_: Exception) {
-                                snippet
+                        val isKeyExchange = snippet.startsWith("[KEY]")
+                        
+                        val displaySnippet = when {
+                            isEncrypted -> {
+                                try {
+                                    "[Decrypted] " + CryptoUtils.decrypt(snippet.substring(5))
+                                } catch (_: Exception) { snippet }
                             }
-                        } else {
-                            snippet
+                            isKeyExchange -> "[Public Key Received]"
+                            else -> snippet
                         }
 
                         val isBlocked = !isGroup && isBlocked(displayAddress)
@@ -192,11 +194,17 @@ class SmsRepository(private val context: Context) {
                     if (date in 1..<1000000000000L) date *= 1000
 
                     val isEncrypted = body.startsWith("[ENC]")
-                    val displayBody = if (isEncrypted) {
-                        try {
-                            "[Decrypted] " + CryptoUtils.decrypt(body.substring(5))
-                        } catch (_: Exception) { body }
-                    } else body
+                    val isKeyExchange = body.startsWith("[KEY]")
+                    
+                    val displayBody = when {
+                        isEncrypted -> {
+                            try {
+                                "[Decrypted] " + CryptoUtils.decrypt(body.substring(5))
+                            } catch (_: Exception) { body }
+                        }
+                        isKeyExchange -> "[Public Key Exchange]"
+                        else -> body
+                    }
 
                     messages.add(
                         Message(
@@ -237,11 +245,17 @@ class SmsRepository(private val context: Context) {
                     val mmsMedia = getMmsMedia(id)
                     val body = mmsMedia?.first ?: ""
                     val isEncrypted = body.startsWith("[ENC]")
-                    val displayBody = if (isEncrypted) {
-                        try {
-                            "[Decrypted] " + CryptoUtils.decrypt(body.substring(5))
-                        } catch (_: Exception) { body }
-                    } else body
+                    val isKeyExchange = body.startsWith("[KEY]")
+                    
+                    val displayBody = when {
+                        isEncrypted -> {
+                            try {
+                                "[Decrypted] " + CryptoUtils.decrypt(body.substring(5))
+                            } catch (_: Exception) { body }
+                        }
+                        isKeyExchange -> "[Public Key Exchange]"
+                        else -> body
+                    }
 
                     // Treat anything not in the INBOX as a "Sent" message from the user's perspective
                     val isSent = msgBox != 1 
@@ -695,6 +709,13 @@ class SmsRepository(private val context: Context) {
                     val from = pdu.from?.getString() ?: "Unknown"
                     val snippet = getMmsSnippet(pdu) ?: "New MMS message"
                     
+                    // Key Exchange Protocol: Detect and save public keys in MMS
+                    if (snippet.startsWith("[KEY]")) {
+                        val keyRepo = KeyRepository(context)
+                        keyRepo.saveKey(from, snippet.substring(5))
+                        Log.d("SmsRepository", "Saved public key for $from via MMS")
+                    }
+
                     if (AppState.currentThreadId != threadId) {
                         NotificationHelper.showNotification(context, threadId, from, snippet)
                     } else {

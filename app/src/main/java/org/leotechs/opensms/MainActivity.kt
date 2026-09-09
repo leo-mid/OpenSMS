@@ -154,32 +154,50 @@ class MainActivity : ComponentActivity() {
             val repository = SmsRepository(this)
             val isGroup = phoneNumber.contains(",")
 
-            if (repository.isBlocked(phoneNumber)){
+            if (repository.isBlocked(phoneNumber)) {
                 Toast.makeText(this, "This number is blocked.", Toast.LENGTH_LONG).show()
                 return false
             }
 
             val finalMessage = if (encrypt) {
-                "[ENC]${CryptoUtils.encrypt(message)}"
+                val keyRepo = KeyRepository(this)
+                val recipients = phoneNumber.split(",").map { it.trim() }.toMutableList()
+                
+                // Add Users OWN public key so  can read their sent messages
+                val publicKeys = recipients.mapNotNull { keyRepo.getKey(it) }.toMutableList()
+                publicKeys.add(CryptoUtils.getPublicKey())
+
+                if (publicKeys.size <= recipients.size) {
+                    Toast.makeText(this, "Missing public keys for some recipients. Send your key first!", Toast.LENGTH_LONG).show()
+                    return false
+                }
+
+                "[ENC]${CryptoUtils.encryptForRecipients(message, publicKeys)}"
             } else {
                 message
             }
 
-            // Apparently group chats only work in MMS
+            // Group messages always use MMS
             if (isGroup) {
                 return sendMms(phoneNumber, null, finalMessage)
             }
 
-            val smsManager =
-                this.getSystemService(SmsManager::class.java)
-
+            val smsManager = this.getSystemService(SmsManager::class.java)
             val threadId = repository.getOrCreateThreadId(phoneNumber)
 
-            smsManager.sendTextMessage(phoneNumber, null, finalMessage, null, null)
+            // Handle long messages (like [KEY] exchange or long texts)
+            if (finalMessage.length > 160) {
+                val parts = smsManager.divideMessage(finalMessage)
+                smsManager.sendMultipartTextMessage(phoneNumber, null, parts, null, null)
+            } else {
+                smsManager.sendTextMessage(phoneNumber, null, finalMessage, null, null)
+            }
+
             repository.saveSentSms(phoneNumber, finalMessage, threadId)
             Toast.makeText(this, "Message sent!", Toast.LENGTH_SHORT).show()
             true
         } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to send SMS", e)
             Toast.makeText(this, "Failed to send message: ${e.message}", Toast.LENGTH_LONG).show()
             false
         }

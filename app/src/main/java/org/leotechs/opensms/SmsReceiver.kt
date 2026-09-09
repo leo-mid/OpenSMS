@@ -24,6 +24,14 @@ class SmsReceiver : BroadcastReceiver() {
                 
                 // Save to system database
                 val threadId = repository.getOrCreateThreadId(sender)
+                
+                // Key Exchange Protocol: Detect and save public keys
+                if (body.startsWith("[KEY]")) {
+                    val keyRepo = KeyRepository(context)
+                    keyRepo.saveKey(sender, body.substring(5))
+                    Log.d("SmsReceiver", "Saved public key for $sender")
+                }
+                
                 repository.saveReceivedSms(sender, body)
                 
                 if (AppState.currentThreadId != threadId) {

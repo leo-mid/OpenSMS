@@ -4,9 +4,13 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import java.nio.ByteBuffer
+import java.security.KeyFactory
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.KeyStore
+import java.security.PublicKey
+import java.security.spec.X509EncodedKeySpec
+import java.util.Arrays
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.spec.GCMParameterSpec
@@ -14,11 +18,6 @@ import javax.crypto.spec.SecretKeySpec
 
 /**
  * Hybrid Encryption Utility (RSA + AES-GCM).
- *
- * Supports large data by:
- * 1. Generating a random AES-256 session key for each encryption.
- * 2. Encrypting the data with AES-GCM (no size limit).
- * 3. Encrypting the session key with RSA (KeyStore backed).
  */
 object CryptoUtils {
     private const val RSA_ALGORITHM = "RSA/ECB/PKCS1Padding"
@@ -29,7 +28,7 @@ object CryptoUtils {
     private const val AES_KEY_SIZE = 256
     private const val GCM_IV_LENGTH = 12
     private const val GCM_TAG_LENGTH = 128
-    private const val RSA_KEY_SIZE_BYTES = 256 // 2048 bit RSA output
+    private const val RSA_KEY_SIZE_BYTES = 256
 
     private val keyPair: KeyPair by lazy {
         val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
@@ -57,18 +56,37 @@ object CryptoUtils {
     }
 
     /**
-     * Encrypts string data. Returns Base64 string.
+     * Returns the local public key object.
      */
-    fun encrypt(data: String): String {
-        val encrypted = encrypt(data.toByteArray())
-        return Base64.encodeToString(encrypted, Base64.NO_WRAP)
+    fun getPublicKey(): PublicKey = keyPair.public
+
+    /**
+     * Returns the local public key encoded as Base64.
+     */
+    fun getLocalPublicKeyBase64(): String {
+        return Base64.encodeToString(keyPair.public.encoded, Base64.NO_WRAP)
     }
 
     /**
-     * Encrypts raw bytes.
-     * Output format: [Encrypted AES Key] + [IV] + [Encrypted Data]
+     * Reconstructs a PublicKey object from a Base64 string.
      */
-    fun encrypt(data: ByteArray): ByteArray {
+    fun getPublicKeyFromBase64(base64Key: String): PublicKey {
+        val keyBytes = Base64.decode(base64Key, Base64.NO_WRAP)
+        val spec = X509EncodedKeySpec(keyBytes)
+        val keyFactory = KeyFactory.getInstance("RSA")
+        return keyFactory.generatePublic(spec)
+    }
+
+    /**
+     * Encrypts for multiple recipients (Group E2EE).
+     * Output format: 
+     * [Num Recipients (Int)] 
+     * + [Recipient 1 Public Key Hash (8 bytes)] + [Encrypted AES Key 1 (256 bytes)]
+     * + [Recipient 2 Public Key Hash (8 bytes)] + [Encrypted AES Key 2 (256 bytes)]
+     * ...
+     * + [IV (12 bytes)] + [Encrypted Data]
+     */
+    fun encryptForRecipients(data: String, publicKeys: List<PublicKey>): String {
         return try {
             val keyGen = KeyGenerator.getInstance("AES")
             keyGen.init(AES_KEY_SIZE)
@@ -77,49 +95,64 @@ object CryptoUtils {
             val aesCipher = Cipher.getInstance(AES_ALGORITHM)
             aesCipher.init(Cipher.ENCRYPT_MODE, aesKey)
             val iv = aesCipher.iv
-            val encryptedData = aesCipher.doFinal(data)
+            val encryptedData = aesCipher.doFinal(data.toByteArray())
 
             val rsaCipher = Cipher.getInstance(RSA_ALGORITHM)
-            rsaCipher.init(Cipher.ENCRYPT_MODE, keyPair.public)
-            val encryptedAesKey = rsaCipher.doFinal(aesKey.encoded)
+            
+            // Header: Number of recipients
+            val headerSize = 4 + (publicKeys.size * (8 + RSA_KEY_SIZE_BYTES))
+            val buffer = ByteBuffer.allocate(headerSize + iv.size + encryptedData.size)
+            
+            buffer.putInt(publicKeys.size)
+            
+            for (pubKey in publicKeys) {
+                // Use a stable hash for the thumbprint
+                val thumbprint = Arrays.hashCode(pubKey.encoded).toLong()
+                rsaCipher.init(Cipher.ENCRYPT_MODE, pubKey)
+                val encryptedAesKey = rsaCipher.doFinal(aesKey.encoded)
+                
+                buffer.putLong(thumbprint)
+                buffer.put(encryptedAesKey)
+            }
 
-            ByteBuffer.allocate(encryptedAesKey.size + iv.size + encryptedData.size)
-                .put(encryptedAesKey)
-                .put(iv)
-                .put(encryptedData)
-                .array()
+            buffer.put(iv)
+            buffer.put(encryptedData)
+
+            Base64.encodeToString(buffer.array(), Base64.NO_WRAP)
         } catch (e: Exception) {
-            byteArrayOf()
+            "Error encrypting for group"
         }
     }
 
     /**
-     * Decrypts Base64 encoded string.
+     * Decrypts by finding the correct RSA block for our local key.
      */
     fun decrypt(encryptedData: String): String {
         return try {
-            val decoded = Base64.decode(encryptedData, Base64.NO_WRAP)
-            String(decrypt(decoded))
-        } catch (e: Exception) {
-            "Error decrypting message"
-        }
-    }
+            val combinedPayload = Base64.decode(encryptedData, Base64.NO_WRAP)
+            val buffer = ByteBuffer.wrap(combinedPayload)
+            
+            val numRecipients = buffer.getInt()
+            val myThumbprint = Arrays.hashCode(keyPair.public.encoded).toLong()
+            
+            var aesKeyBytes: ByteArray? = null
+            
+            // Search for the block encrypted for us
+            repeat(numRecipients) {
+                val thumbprint = buffer.getLong()
+                val encryptedBlock = ByteArray(RSA_KEY_SIZE_BYTES)
+                buffer.get(encryptedBlock)
+                
+                if (thumbprint == myThumbprint) {
+                    val rsaCipher = Cipher.getInstance(RSA_ALGORITHM)
+                    rsaCipher.init(Cipher.DECRYPT_MODE, keyPair.private)
+                    aesKeyBytes = rsaCipher.doFinal(encryptedBlock)
+                }
+            }
+            
+            if (aesKeyBytes == null) return "Message not encrypted for you"
 
-    /**
-     * Decrypts raw bytes.
-     */
-    fun decrypt(encryptedData: ByteArray): ByteArray {
-        return try {
-            val buffer = ByteBuffer.wrap(encryptedData)
-
-            val encryptedAesKey = ByteArray(RSA_KEY_SIZE_BYTES)
-            buffer.get(encryptedAesKey)
-
-            val rsaCipher = Cipher.getInstance(RSA_ALGORITHM)
-            rsaCipher.init(Cipher.DECRYPT_MODE, keyPair.private)
-            val aesKeyBytes = rsaCipher.doFinal(encryptedAesKey)
             val aesKey = SecretKeySpec(aesKeyBytes, "AES")
-
             val iv = ByteArray(GCM_IV_LENGTH)
             buffer.get(iv)
 
@@ -128,9 +161,11 @@ object CryptoUtils {
 
             val aesCipher = Cipher.getInstance(AES_ALGORITHM)
             aesCipher.init(Cipher.DECRYPT_MODE, aesKey, GCMParameterSpec(GCM_TAG_LENGTH, iv))
-            aesCipher.doFinal(encryptedBytes)
+            val decryptedBytes = aesCipher.doFinal(encryptedBytes)
+
+            String(decryptedBytes)
         } catch (e: Exception) {
-            byteArrayOf()
+            "Error decrypting message"
         }
     }
 }

@@ -241,7 +241,7 @@ fun ConversationList(
 @Composable
 fun ConversationItem(conversation: Conversation, onClick: () -> Unit) {
     val dateString = remember(conversation.date) {
-        formatConversationDate(conversation.date)
+        timestampHandler(conversation.date, "ConvoView")
     }
 
     ListItem(
@@ -346,44 +346,8 @@ fun ConversationItem(conversation: Conversation, onClick: () -> Unit) {
     )
 }
 
-// Controls how the date is formated for the conversation
-// Ex: Yesterday, Weekdays, 6 days ago + mm/dd/YY
-private fun formatConversationDate(timestamp: Long): String {
-    val now = Calendar.getInstance()
-    val msgDate = Calendar.getInstance().apply { timeInMillis = timestamp }
-
-    val isSameDay = now.get(Calendar.YEAR) == msgDate.get(Calendar.YEAR) &&
-            now.get(Calendar.DAY_OF_YEAR) == msgDate.get(Calendar.DAY_OF_YEAR)
-
-    if (isSameDay) {
-        return SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(timestamp))
-    }
-
-    val yesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
-    val isYesterday = yesterday.get(Calendar.YEAR) == msgDate.get(Calendar.YEAR) &&
-            yesterday.get(Calendar.DAY_OF_YEAR) == msgDate.get(Calendar.DAY_OF_YEAR)
-
-    if (isYesterday) {
-        return "Yesterday"
-    }
-
-    val sixDaysAgo = Calendar.getInstance().apply { 
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-        add(Calendar.DAY_OF_YEAR, -6) 
-    }
-    
-    return if (!msgDate.before(sixDaysAgo)) {
-        SimpleDateFormat("EEEE", Locale.getDefault()).format(Date(timestamp))
-    } else {
-        SimpleDateFormat("MM/dd/yy", Locale.getDefault()).format(Date(timestamp))
-    }
-}
-
-// Controls how the date is formated for the message splitting
-private fun formatDetailedTimestamp(timestamp: Long): String {
+// Handles how the different timestamps are displayed
+private fun timestampHandler(timestamp: Long, type: String? = null): String {
     val date = Date(timestamp)
     val now = Calendar.getInstance()
     val msgDate = Calendar.getInstance().apply { timeInMillis = timestamp }
@@ -412,14 +376,16 @@ private fun formatDetailedTimestamp(timestamp: Long): String {
             }
         }
     }
-    
-    return "$dayStr\n$timeStr"
-}
-
-// Get simple timestamp time for message swipe
-private fun formatSimpleTimestamp(timestamp: Long): String {
-    val date = Date(timestamp)
-    return SimpleDateFormat("h:mm a", Locale.getDefault()).format(date)
+    if (type == "MessageView"){
+        return "$dayStr\n$timeStr"
+    } else if (type == "ConvoView"){
+        if ("$dayStr" == "Today"){
+            return "$timeStr"
+        }
+        return "$dayStr"
+    } else {
+        return "$timeStr"
+    }
 }
 
 @Composable
@@ -866,7 +832,7 @@ fun MessageDetail(
                     ) {
                         if (showTimestamp) {
                             Text(
-                                text = formatDetailedTimestamp(message.date),
+                                text = timestampHandler(message.date, "MessageView"),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.outline,
                                 textAlign = TextAlign.Center,
@@ -884,7 +850,7 @@ fun MessageDetail(
                         ) {
                             // Revealed timestamp
                             Text(
-                                text = formatSimpleTimestamp(message.date),
+                                text = timestampHandler(message.date),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.outline,
                                 modifier = Modifier

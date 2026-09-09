@@ -19,14 +19,29 @@ As of version 1.4.0 there is:
 * Group conversations (1.3.0)
 * Uses Material 3 throughout (1.4.0)
 * Start a call via the app (Using default calling app) (1.4.0)
+* Blocking Numbers (1.4.0)
+* End-to-End Encryption (1.4.0) - Untested don't have two android devices. Please lmk if any issues.
+* Creating Contacts (1.4.0)
+
+## End-to-End Encryption (E2EE)
+OpenSMS supports  end-to-end encryption for SMS and MMS messages using a hybrid encryption scheme.
+
+### How it Works
+*   **Hybrid Encryption**: Every message is encrypted with a unique AES-256 session key (GCM mode). This session key is then encrypted using the recipient's RSA-2048 public key.
+*   **Secure Key Storage**: Your private RSA key is generated and stored securely within the `AndroidKeyStore`, ensuring it never leaves your device.
+*   **Group Support**: For group chats, the session key is encrypted multiple times—once for every participant.
+*   **Self-Decryption**: The app automatically includes your own public key in the message header, allowing you to decrypt and read your own sent messages.
+
+### How to Use
+1.  **Exchange Keys**: Open a conversation, tap the three-dot menu, and select **Share Encryption Key**. This sends your public key to the contact.
+2.  **Wait for Response**: Once the other person shares their key back, the app automatically saves it.
+3.  **Enable Encryption**: Tap the three-dot menu and select **Encrypt Conversation**.
+4.  **Send**: When you see the lock icon next to the person name you are good to go.
 
 ## Upcoming Features
 These features are coming soon:
-* Creating Contacts
-* Deleting messages
+* Deleting individual messages
 * Message actions such as saving MMS to device
-* Enabling Encrypted SMS (Would only work if both/everyone has this app)
-* Blocking Numbers
 * Message Reactions
 
 ## Permissions

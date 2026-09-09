@@ -8,6 +8,7 @@ import java.security.PublicKey
  */
 class KeyRepository(context: Context) {
     private val prefs = context.getSharedPreferences("contact_keys", Context.MODE_PRIVATE)
+    private val encryptionPrefs = context.getSharedPreferences("conversation_encryption", Context.MODE_PRIVATE)
 
     /**
      * Saves a contact's public key.
@@ -35,6 +36,20 @@ class KeyRepository(context: Context) {
      */
     fun hasKey(address: String): Boolean {
         return prefs.contains(normalizeAddress(address))
+    }
+
+    /**
+     * Sets whether encryption is enabled for a specific thread.
+     */
+    fun setEncryptionEnabled(threadId: Long, enabled: Boolean) {
+        encryptionPrefs.edit().putBoolean(threadId.toString(), enabled).apply()
+    }
+
+    /**
+     * Checks if encryption is enabled for a specific thread.
+     */
+    fun isEncryptionEnabled(threadId: Long): Boolean {
+        return encryptionPrefs.getBoolean(threadId.toString(), false)
     }
 
     private fun normalizeAddress(address: String): String {

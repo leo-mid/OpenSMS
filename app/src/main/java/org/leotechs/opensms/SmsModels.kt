@@ -10,6 +10,7 @@ data class Conversation(
     val contactName: String?,
     val contactPhotoUri: String?,
     val isEncrypted: Boolean,
+    val isAlwaysEncrypted: Boolean = false,
     val isRead: Boolean = true,
     val isGroup: Boolean = false,
     val isBlocked: Boolean = false,

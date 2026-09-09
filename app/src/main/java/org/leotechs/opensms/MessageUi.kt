@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayCircle
@@ -262,6 +263,15 @@ fun ConversationItem(conversation: Conversation, onClick: () -> Unit) {
                         tint = MaterialTheme.colorScheme.error
                     )
                 }
+                if (conversation.isAlwaysEncrypted) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = "Always Encrypted",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         },
         // Message Preview
@@ -432,6 +442,7 @@ fun MessageDetail(
     var isLoading by remember(threadId) { mutableStateOf(false) }
     var loadJob by remember(threadId) { mutableStateOf<Job?>(null) }
     var lastUpdate by remember(threadId) { mutableLongStateOf(0L) }
+    var isEncryptionEnabled by remember(threadId) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val isGroup = phoneNumber.contains(",")
 
@@ -580,6 +591,8 @@ fun MessageDetail(
     }
 
     LaunchedEffect(threadId) {
+        val keyRepo = KeyRepository(context)
+        isEncryptionEnabled = keyRepo.isEncryptionEnabled(threadId)
         loadMessages(isRefresh = true)
     }
 
@@ -639,6 +652,15 @@ fun MessageDetail(
                     modifier = Modifier.padding(start = 8.dp)
                 )
 
+                if (isEncryptionEnabled) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = "Always Encrypted",
+                        modifier = Modifier.padding(start = 4.dp).size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
                 // Shoves the call & menu button to the right
                 Spacer(modifier = Modifier.weight(1f))
 
@@ -684,7 +706,6 @@ fun MessageDetail(
                                 onSendSms(phoneNumber, "[KEY]$myKey", false)
                                 Toast.makeText(context, "Public key sent!", Toast.LENGTH_SHORT).show()
                             }
-                            // leadingIcon = { Icon(Icons.Default.VpnKey, contentDescription = null) }
                         )
 
                         // Ex: Unknwon numbers messaging you options (non-group)
@@ -702,8 +723,16 @@ fun MessageDetail(
                             )
 
                             DropdownMenuItem(
-                                text = { Text("Send Encrypted SMS") },
+                                text = {
+                                    if(isEncryptionEnabled){
+                                        Text("Conversation Encrypted")
+                                    } else
+                                        Text("Unencrypt Conversation")
+                                },
                                 onClick = {
+                                    val newState = !isEncryptionEnabled
+                                    isEncryptionEnabled = newState
+                                    KeyRepository(context).setEncryptionEnabled(threadId, newState)
                                     menuExpanded = false
                                 }
                             )
@@ -734,12 +763,20 @@ fun MessageDetail(
                                 }
                             )
 
-                            DropdownMenuItem(
-                                text = { Text("Send Encrypted SMS") },
-                                onClick = {
-                                    menuExpanded = false
-                                }
-                            )
+                        DropdownMenuItem(
+                            text = {
+                                if(isEncryptionEnabled){
+                                    Text("Conversation Encrypted")
+                                } else
+                                    Text("Unencrypt Conversation")
+                            },
+                            onClick = {
+                                val newState = !isEncryptionEnabled
+                                isEncryptionEnabled = newState
+                                KeyRepository(context).setEncryptionEnabled(threadId, newState)
+                                menuExpanded = false
+                            }
+                        )
 
                             DropdownMenuItem(
                                 text = { Text(if (isBlocked) "Unblock Number" else "Block Number") },
@@ -750,8 +787,16 @@ fun MessageDetail(
                             )
                         } else { // Ex: Group conversation
                             DropdownMenuItem(
-                                text = { Text("Send Encrypted SMS") },
+                                text = {
+                                    if(isEncryptionEnabled){
+                                        Text("Conversation Encrypted")
+                                    } else
+                                        Text("Unencrypt Conversation")
+                                },
                                 onClick = {
+                                    val newState = !isEncryptionEnabled
+                                    isEncryptionEnabled = newState
+                                    KeyRepository(context).setEncryptionEnabled(threadId, newState)
                                     menuExpanded = false
                                 }
                             )
@@ -959,7 +1004,7 @@ fun MessageDetail(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Button(onClick = {
-                        if (onSendSms(phoneNumber, messageText, false)) {
+                        if (onSendSms(phoneNumber, messageText, isEncryptionEnabled)) {
                             messageText = ""
                             loadMessages(isRefresh = true)
                         }

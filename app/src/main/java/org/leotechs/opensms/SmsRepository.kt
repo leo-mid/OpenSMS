@@ -15,6 +15,7 @@ class SmsRepository(private val context: Context) {
 
     private val contactCache = mutableMapOf<String, Pair<String?, String?>>()
     private val canonicalAddressCache = mutableMapOf<Long, String>()
+    private val keyRepository = KeyRepository(context)
 
     fun clearContactCache() {
         contactCache.clear()
@@ -116,6 +117,7 @@ class SmsRepository(private val context: Context) {
                         }
 
                         val isBlocked = !isGroup && isBlocked(displayAddress)
+                        val isAlwaysEncrypted = keyRepository.isEncryptionEnabled(threadId)
 
                         conversations.add(
                             Conversation(
@@ -126,6 +128,7 @@ class SmsRepository(private val context: Context) {
                                 contactName = contactName,
                                 contactPhotoUri = contactPhotoUri,
                                 isEncrypted = isEncrypted,
+                                isAlwaysEncrypted = isAlwaysEncrypted,
                                 isRead = isRead,
                                 isGroup = isGroup,
                                 isBlocked = isBlocked,

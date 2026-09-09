@@ -103,19 +103,28 @@ class SmsRepository(private val context: Context) {
                         
                         val contactPhotoUri = if (isGroup) null else contactInfos.firstOrNull()?.second
 
-                        val isEncrypted = snippet.startsWith("[ENC]")
-                        val isKeyExchange = snippet.startsWith("[KEY]")
-                        
-                        val displaySnippet = when {
-                            isEncrypted -> {
-                                try {
-                                    "[Decrypted] " + CryptoUtils.decrypt(snippet.substring(5))
-                                } catch (_: Exception) { snippet }
+                        // NEW: Generate snippet by fetching the latest logical message
+                        // This handles split segments and decryption correctly for the preview.
+                        val latestMessages = getMessages(threadId, limit = 1)
+                        val displaySnippet = if (latestMessages.isNotEmpty()) {
+                            val msg = latestMessages[0]
+                            when {
+                                msg.body.isNotBlank() -> msg.body
+                                msg.isMms && msg.mediaUri != null -> {
+                                    val type = msg.mediaContentType ?: ""
+                                    when {
+                                        type.startsWith("image/") -> "Image"
+                                        type.startsWith("video/") -> "Video"
+                                        else -> "Attachment"
+                                    }
+                                }
+                                else -> snippet.ifBlank { "New Message" }
                             }
-                            isKeyExchange -> "[Public Key Received]"
-                            else -> snippet
+                        } else {
+                            snippet.ifBlank { "New Message" }
                         }
 
+                        val isEncrypted = displaySnippet.startsWith("[Decrypted]") || displaySnippet.startsWith("[ENC]")
                         val isBlocked = !isGroup && isBlocked(displayAddress)
                         val isAlwaysEncrypted = keyRepository.isEncryptionEnabled(threadId)
 
@@ -167,12 +176,13 @@ class SmsRepository(private val context: Context) {
     }
 
     fun getMessages(threadId: Long, limit: Int = 30, offset: Int = 0): List<Message> {
-        val messages = mutableListOf<Message>()
+        val rawMessages = mutableListOf<Message>()
         
-        // Strategy: Query SMS and MMS separately to use SQL LIMIT for performance,
-        val fetchCount = limit + offset + 20 
+        // Strategy: Query SMS and MMS separately, merge segments, then decrypt.
+        // We fetch more than the limit to ensure we have enough segments to merge.
+        val fetchCount = limit + offset + 50 
 
-        // 1. Query SMS
+        // 1. Query SMS (Raw bodies, no decryption yet)
         try {
             context.contentResolver.query(
                 Telephony.Sms.CONTENT_URI,
@@ -196,27 +206,14 @@ class SmsRepository(private val context: Context) {
 
                     if (date in 1..<1000000000000L) date *= 1000
 
-                    val isEncrypted = body.startsWith("[ENC]")
-                    val isKeyExchange = body.startsWith("[KEY]")
-                    
-                    val displayBody = when {
-                        isEncrypted -> {
-                            try {
-                                "[Decrypted] " + CryptoUtils.decrypt(body.substring(5))
-                            } catch (_: Exception) { body }
-                        }
-                        isKeyExchange -> "[Public Key Exchange]"
-                        else -> body
-                    }
-
-                    messages.add(
+                    rawMessages.add(
                         Message(
                             id = "sms_$id",
                             address = address,
-                            body = displayBody,
+                            body = body,
                             date = date,
                             type = type,
-                            isEncrypted = isEncrypted,
+                            isEncrypted = false,
                             isMms = false,
                             senderAddress = if (type == 2) null else address
                         )
@@ -247,31 +244,18 @@ class SmsRepository(private val context: Context) {
 
                     val mmsMedia = getMmsMedia(id)
                     val body = mmsMedia?.first ?: ""
-                    val isEncrypted = body.startsWith("[ENC]")
-                    val isKeyExchange = body.startsWith("[KEY]")
                     
-                    val displayBody = when {
-                        isEncrypted -> {
-                            try {
-                                "[Decrypted] " + CryptoUtils.decrypt(body.substring(5))
-                            } catch (_: Exception) { body }
-                        }
-                        isKeyExchange -> "[Public Key Exchange]"
-                        else -> body
-                    }
-
-                    // Treat anything not in the INBOX as a "Sent" message from the user's perspective
                     val isSent = msgBox != 1 
                     val otherPartyAddress = if (!isSent) getMmsAddress(id, 137) else getMmsAddress(id, 151)
 
-                    messages.add(
+                    rawMessages.add(
                         Message(
                             id = "mms_$id",
                             address = otherPartyAddress ?: "Unknown",
-                            body = displayBody,
+                            body = body,
                             date = date,
                             type = if (isSent) 2 else 1,
-                            isEncrypted = isEncrypted,
+                            isEncrypted = false,
                             isMms = true,
                             mediaUri = mmsMedia?.second,
                             mediaContentType = mmsMedia?.third,
@@ -282,12 +266,57 @@ class SmsRepository(private val context: Context) {
             }
         } catch (e: Exception) { Log.e("SmsRepository", "Error querying MMS", e) }
 
-        // 3. Merge, Sort and Paginate
-        val allSorted = messages.sortedByDescending { it.date }
-        val start = offset.coerceIn(0, allSorted.size)
-        val end = (offset + limit).coerceIn(0, allSorted.size)
+        // 3. Merge Segments (Same sender, same type, small time diff, SMS only)
+        val sortedRaw = rawMessages.sortedByDescending { it.date }
+        val mergedMessages = mutableListOf<Message>()
+        var current: Message? = null
         
-        return allSorted.subList(start, end)
+        // Process chronologically to merge
+        for (msg in sortedRaw.reversed()) {
+            if (current == null) {
+                current = msg
+            } else {
+                val timeDiff = msg.date - current.date
+                if (msg.address == current.address && 
+                    msg.type == current.type && 
+                    !msg.isMms && !current.isMms &&
+                    timeDiff < 5000) {
+                    
+                    current = current.copy(
+                        body = current.body + msg.body,
+                        date = msg.date
+                    )
+                } else {
+                    mergedMessages.add(current)
+                    current = msg
+                }
+            }
+        }
+        current?.let { mergedMessages.add(it) }
+
+        // 4. Decrypt and Format
+        val finalMessages = mergedMessages.map { msg ->
+            val isEncrypted = msg.body.startsWith("[ENC]")
+            val isKeyExchange = msg.body.startsWith("[KEY]")
+            
+            val displayBody = when {
+                isEncrypted -> {
+                    try {
+                        "[Decrypted] " + CryptoUtils.decrypt(msg.body.substring(5))
+                    } catch (_: Exception) { msg.body }
+                }
+                isKeyExchange -> "[Public Key Exchange]"
+                else -> msg.body
+            }
+            
+            msg.copy(body = displayBody, isEncrypted = isEncrypted)
+        }.sortedByDescending { it.date }
+
+        // 5. Paginate
+        val start = offset.coerceIn(0, finalMessages.size)
+        val end = (offset + limit).coerceIn(0, finalMessages.size)
+        
+        return finalMessages.subList(start, end)
     }
 
     private fun getMmsMedia(mmsId: Long): Triple<String?, Uri?, String?>? {

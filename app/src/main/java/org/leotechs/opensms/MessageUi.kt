@@ -541,19 +541,8 @@ fun MessageDetail(
                 
                 withContext(Dispatchers.Main) {
                     if (isRefresh) {
-                        // Smart Update: Instead of clear() + addAll(), which causes a flash,
-                        // it now compares the new messages with the existing ones.
-                        if (messages.isEmpty()) {
-                            messages.addAll(newMsgs)
-                        } else {
-                            // Find messages in newMsgs that aren't in the list
-                            val existingIds = messages.map { it.id }.toSet()
-                            val reallyNew = newMsgs.filter { !existingIds.contains(it.id) }
-                            if (reallyNew.isNotEmpty()) {
-                                messages.addAll(reallyNew)
-                                messages.sortByDescending { it.date }
-                            }
-                        }
+                        messages.clear()
+                        messages.addAll(newMsgs)
                     } else {
                         // Loading older messages (pagination)
                         val existingIds = messages.map { it.id }.toSet()
@@ -1088,7 +1077,6 @@ fun MessageItem(message: Message, isGroup: Boolean = false) {
                 // Checks if the message has an attachment and handles it to display it in the correct way
                 Column {
                     if (message.isMms && message.mediaUri != null) {
-                        val context = LocalContext.current
                         val isVideo = message.mediaContentType?.startsWith("video/") == true
                         
                         Box(

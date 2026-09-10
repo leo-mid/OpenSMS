@@ -404,14 +404,15 @@ fun MessageDetail(
     onBack: () -> Unit,
     onSendSms: (String, String, Boolean) -> Boolean,
     onSendMms: (String, Uri?) -> Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    initialMessage: String? = null
 ) {
     val context = LocalContext.current
     val repository = remember { SmsRepository(context) }
     val messages = remember(threadId) { mutableStateListOf<Message>() }
     var phoneNumber by remember(threadId) { mutableStateOf("") }
     var displayName by remember(threadId) { mutableStateOf(contactName) }
-    var messageText by remember(threadId) { mutableStateOf("") }
+    var messageText by remember(threadId, initialMessage) { mutableStateOf(initialMessage ?: "") }
     var page by remember(threadId) { mutableIntStateOf(0) }
     var canLoadMore by remember(threadId) { mutableStateOf(true) }
     var isLoading by remember(threadId) { mutableStateOf(false) }

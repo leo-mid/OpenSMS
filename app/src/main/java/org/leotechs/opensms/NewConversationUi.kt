@@ -34,12 +34,14 @@ fun NewConversationScreen(
     onMessageSent: (Long, String) -> Unit,
     onSendSms: (String, String, Boolean) -> Boolean,
     onSendMms: (String, Uri?) -> Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    initialRecipient: String? = null,
+    initialMessage: String? = null
 ) {
     val context = LocalContext.current
     val repository = remember { SmsRepository(context) }
-    var recipientInput by remember { mutableStateOf("") }
-    var messageText by remember { mutableStateOf("") }
+    var recipientInput by remember(initialRecipient) { mutableStateOf(initialRecipient ?: "") }
+    var messageText by remember(initialMessage) { mutableStateOf(initialMessage ?: "") }
     var contacts by remember { mutableStateOf<List<Contact>>(emptyList()) }
     val selectedRecipients = remember { mutableStateListOf<Contact>() }
 

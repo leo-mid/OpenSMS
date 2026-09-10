@@ -33,6 +33,8 @@ class MainActivity : ComponentActivity() {
     private var isCreatingNewConversation by mutableStateOf(false)
     private var isSettingsOpen by mutableStateOf(false)
     private var isAboutOpen by mutableStateOf(false)
+    private var initialRecipient by mutableStateOf<String?>(null)
+    private var initialMessage by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,13 +42,7 @@ class MainActivity : ComponentActivity() {
         NotificationHelper.createNotificationChannel(this)
         checkDefaultSmsStatus()
 
-        val intentThreadId = intent.getLongExtra("THREAD_ID", -1L)
-        if (intentThreadId != -1L) {
-            currentThreadId = intentThreadId
-            AppState.currentThreadId = intentThreadId
-            SmsRepository(this).markAsRead(intentThreadId)
-            NotificationHelper.cancelNotification(this, intentThreadId)
-        }
+        handleIntent(intent)
 
         if (!isDefaultSmsApp) {
             requestDefaultSmsRole()
@@ -76,11 +72,17 @@ class MainActivity : ComponentActivity() {
                             }
                             isCreatingNewConversation -> {
                                 NewConversationScreen(
-                                    onBack = { isCreatingNewConversation = false },
+                                    onBack = { 
+                                        isCreatingNewConversation = false
+                                        initialRecipient = null
+                                        initialMessage = null
+                                    },
                                     onMessageSent = { threadId, address ->
                                         currentThreadId = threadId
                                         AppState.currentThreadId = threadId
                                         isCreatingNewConversation = false
+                                        initialRecipient = null
+                                        initialMessage = null
                                         val contactInfo = SmsRepository(this@MainActivity).getContactInfo(address)
                                         currentContactName = contactInfo.first
                                     },
@@ -90,6 +92,8 @@ class MainActivity : ComponentActivity() {
                                     onSendMms = { number, uri ->
                                         sendMms(number, uri)
                                     },
+                                    initialRecipient = initialRecipient,
+                                    initialMessage = initialMessage,
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
@@ -117,6 +121,7 @@ class MainActivity : ComponentActivity() {
                                     onBack = { 
                                         currentThreadId = null 
                                         AppState.currentThreadId = null
+                                        initialMessage = null
                                     },
                                     onSendSms = { number: String, message: String, encrypt: Boolean ->
                                         sendSms(number, message, encrypt)
@@ -124,6 +129,7 @@ class MainActivity : ComponentActivity() {
                                     onSendMms = { number: String, uri: Uri? ->
                                         sendMms(number, uri)
                                     },
+                                    initialMessage = initialMessage,
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
@@ -155,12 +161,80 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
-        intent?.getLongExtra("THREAD_ID", -1L)?.let { threadId ->
-            if (threadId != -1L) {
-                currentThreadId = threadId
-                AppState.currentThreadId = threadId
-                SmsRepository(this).markAsRead(threadId)
-                NotificationHelper.cancelNotification(this, threadId)
+        intent?.let { handleIntent(it) }
+    }
+
+    private fun handleIntent(intent: Intent) {
+        Log.d("MainActivity", "Handling intent: ${intent.action}, data: ${intent.data}")
+        
+        val intentThreadId = intent.getLongExtra("THREAD_ID", -1L)
+        if (intentThreadId != -1L) {
+            currentThreadId = intentThreadId
+            AppState.currentThreadId = intentThreadId
+            SmsRepository(this).markAsRead(intentThreadId)
+            NotificationHelper.cancelNotification(this, intentThreadId)
+            isCreatingNewConversation = false
+            return
+        }
+
+        val action = intent.action
+        val data = intent.data
+        
+        if (action == Intent.ACTION_SENDTO || action == Intent.ACTION_VIEW) {
+            var address = data?.schemeSpecificPart?.substringBefore('?')
+            if (address.isNullOrBlank()) {
+                address = intent.getStringExtra("address") ?: intent.getStringExtra(Intent.EXTRA_EMAIL)
+            }
+            
+            val body = intent.getStringExtra("sms_body") ?: intent.getStringExtra(Intent.EXTRA_TEXT)
+            
+            if (!address.isNullOrBlank()) {
+                // Normalize address: remove 'sms:', 'smsto:', etc if they leaked into the part
+                val cleanAddress = address.removePrefix("sms:").removePrefix("smsto:").removePrefix("mms:").removePrefix("mmsto:")
+                
+                val repository = SmsRepository(this)
+                val threadId = repository.findThreadId(cleanAddress)
+                if (threadId != -1L) {
+                    currentThreadId = threadId
+                    AppState.currentThreadId = threadId
+                    currentContactName = repository.getContactInfo(cleanAddress).first
+                    repository.markAsRead(threadId)
+                    NotificationHelper.cancelNotification(this, threadId)
+                    isCreatingNewConversation = false
+                    initialMessage = body
+                } else {
+                    initialRecipient = cleanAddress
+                    initialMessage = body
+                    isCreatingNewConversation = true
+                    currentThreadId = null
+                    AppState.currentThreadId = null
+                }
+            } else if (action == Intent.ACTION_VIEW) {
+                // Check if URI is a specific thread URI like content://mms-sms/conversations/1
+                val threadIdFromUri = if (data?.toString()?.startsWith("content://mms-sms/conversations/") == true) {
+                    data.lastPathSegment?.toLongOrNull() ?: -1L
+                } else -1L
+
+                if (threadIdFromUri != -1L) {
+                    currentThreadId = threadIdFromUri
+                    AppState.currentThreadId = threadIdFromUri
+                    isCreatingNewConversation = false
+                } else {
+                    // Just open the app / conversation list
+                    currentThreadId = null
+                    AppState.currentThreadId = null
+                    isCreatingNewConversation = false
+                    isSettingsOpen = false
+                    isAboutOpen = false
+                }
+            }
+        } else if (action == Intent.ACTION_SEND) {
+            val body = intent.getStringExtra(Intent.EXTRA_TEXT)
+            if (!body.isNullOrBlank()) {
+                initialMessage = body
+                isCreatingNewConversation = true
+                currentThreadId = null
+                AppState.currentThreadId = null
             }
         }
     }

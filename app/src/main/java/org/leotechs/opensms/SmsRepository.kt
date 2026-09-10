@@ -561,6 +561,23 @@ class SmsRepository(private val context: Context) {
         return addresses.distinct()
     }
 
+    fun findThreadId(address: String): Long {
+        if (address.isBlank()) return -1L
+        try {
+            // Normalize the address to numbers and plus sign only for better thread matching
+            val cleanAddress = address.filter { it.isDigit() || it == '+' || it == ',' }
+            val addresses = cleanAddress.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+            if (addresses.isEmpty()) return -1L
+            
+            val threadId = Telephony.Threads.getOrCreateThreadId(context, addresses)
+            Log.d("SmsRepository", "Found/Created thread ID $threadId for addresses: $addresses")
+            return threadId
+        } catch (e: Exception) {
+            Log.e("SmsRepository", "Error finding/creating thread ID for $address", e)
+        }
+        return -1L
+    }
+
     fun getOrCreateThreadId(address: String): Long {
         return try {
             val addresses = address.split(",").map { it.trim() }.toSet()

@@ -56,7 +56,7 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     modifier = Modifier.fillMaxSize()
                 ) { innerPadding ->
-                    Box(modifier = Modifier.padding(innerPadding)) {
+                    Box(modifier = Modifier.fillMaxSize()) {
                         when {
                             isAboutOpen -> {
                                 AboutScreen(
@@ -111,7 +111,7 @@ class MainActivity : ComponentActivity() {
                                     onNewConversation = { isCreatingNewConversation = true },
                                     onSettingsClick = { isSettingsOpen = true },
                                     onAboutClick = { isAboutOpen = true },
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier.padding(innerPadding).fillMaxSize()
                                 )
                             }
                             else -> {
@@ -130,7 +130,7 @@ class MainActivity : ComponentActivity() {
                                         sendMms(number, uri)
                                     },
                                     initialMessage = initialMessage,
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier.padding(innerPadding).fillMaxSize()
                                 )
                             }
                         }

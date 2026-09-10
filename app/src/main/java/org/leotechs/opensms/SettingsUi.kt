@@ -216,17 +216,18 @@ fun PermissionItem(info: PermissionInfo) {
                 Text(info.explanation)
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val successColor = Color(0xFF4CAF50)
                     Icon(
                         imageVector = if (isGranted) Icons.Default.CheckCircle else Icons.Default.Error,
                         contentDescription = null,
-                        tint = if (isGranted) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                        tint = if (isGranted) successColor else MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = if (isGranted) "Enabled" else "Disabled",
                         style = MaterialTheme.typography.labelMedium,
-                        color = if (isGranted) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
+                        color = if (isGranted) successColor else MaterialTheme.colorScheme.error
                     )
                 }
             }

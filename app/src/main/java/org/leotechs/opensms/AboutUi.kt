@@ -133,7 +133,8 @@ fun AboutScreen(
                 Icon(
                     painter = painterResource(id = R.drawable.ic_github),
                     contentDescription = null,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(20.dp),
+                    tint = LocalContentColor.current
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("View on GitHub")

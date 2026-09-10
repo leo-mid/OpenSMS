@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
@@ -48,9 +49,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -69,6 +75,7 @@ import org.leotechs.opensms.ui.theme.OpenSMSTheme
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+import android.util.Patterns
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -814,22 +821,6 @@ fun MessageDetail(
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 16.dp)
-                    .pointerInput(Unit) {
-                        detectHorizontalDragGestures(
-                            onDragEnd = {
-                                scope.launch { swipeOffset.animateTo(0f) }
-                            },
-                            onDragCancel = {
-                                scope.launch { swipeOffset.animateTo(0f) }
-                            },
-                            onHorizontalDrag = { _, dragAmount ->
-                                scope.launch {
-                                    val newOffset = (swipeOffset.value + dragAmount).coerceIn(-200f, 0f)
-                                    swipeOffset.snapTo(newOffset)
-                                }
-                            }
-                        )
-                    }
             ) {
                 itemsIndexed(messages, key = { _, it -> it.id }) { index, message ->
                     val nextMessage = if (index + 1 < messages.size) messages[index + 1] else null
@@ -873,6 +864,23 @@ fun MessageDetail(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .offset { IntOffset(swipeOffset.value.toInt(), 0) }
+                                    .pointerInput(Unit) {
+                                        detectHorizontalDragGestures(
+                                            onDragEnd = {
+                                                scope.launch { swipeOffset.animateTo(0f) }
+                                            },
+                                            onDragCancel = {
+                                                scope.launch { swipeOffset.animateTo(0f) }
+                                            },
+                                            onHorizontalDrag = { _, dragAmount ->
+                                                scope.launch {
+                                                    val newOffset = (swipeOffset.value + dragAmount).coerceIn(-200f, 0f)
+                                                    swipeOffset.snapTo(newOffset)
+                                                }
+                                            }
+                                        )
+                                    }
+                                    .animateItem()
                             ) {
                                 MessageItem(message, isGroup)
                             }
@@ -942,6 +950,89 @@ fun MessageDetail(
             }
         }
     }
+}
+
+@Composable
+fun SmartLinkText(
+    text: String,
+    isSent: Boolean,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified
+) {
+    val uriHandler = LocalUriHandler.current
+    val urlPattern = Patterns.WEB_URL
+    
+    val annotatedString = buildAnnotatedString {
+        val matcher = urlPattern.matcher(text)
+        var lastIndex = 0
+        while (matcher.find()) {
+            val start = matcher.start()
+            val end = matcher.end()
+            
+            append(text.substring(lastIndex, start))
+            
+            val fullUrl = matcher.group() ?: ""
+            val destinationUrl = if (!fullUrl.startsWith("http") && !fullUrl.startsWith("ftp")) {
+                "http://$fullUrl"
+            } else {
+                fullUrl
+            }
+            
+            val uri = try { Uri.parse(destinationUrl) } catch (_: Exception) { null }
+            val host = uri?.host ?: ""
+            val path = uri?.path?.split("/")?.filter { it.isNotEmpty() }?.firstOrNull() ?: ""
+            
+            val displayUrl = if (host.isNotEmpty()) {
+                val shortHost = host.removePrefix("www.")
+                if (path.isNotEmpty() && path.length < 20) {
+                    "$shortHost/$path"
+                } else if (path.isNotEmpty()) {
+                    "$shortHost/..."
+                } else {
+                    shortHost
+                }
+            } else {
+                fullUrl.removePrefix("https://").removePrefix("http://").removePrefix("www.")
+            }
+            
+            val linkColor = if (isSent) {
+                MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.95f)
+            } else {
+                MaterialTheme.colorScheme.primary
+            }
+            
+            pushStringAnnotation(tag = "URL", annotation = destinationUrl)
+            withStyle(style = SpanStyle(
+                color = linkColor,
+                textDecoration = TextDecoration.Underline,
+                fontWeight = FontWeight.Bold
+            )) {
+                append(displayUrl)
+            }
+            pop()
+            lastIndex = end
+        }
+        append(text.substring(lastIndex))
+    }
+
+    ClickableText(
+        text = annotatedString,
+        modifier = modifier,
+        style = MaterialTheme.typography.bodyLarge.copy(
+            color = color,
+            textAlign = if (isSent) TextAlign.End else TextAlign.Start
+        ),
+        onClick = { offset ->
+            annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                .firstOrNull()?.let { annotation ->
+                    try {
+                        uriHandler.openUri(annotation.item)
+                    } catch (e: Exception) {
+                        Log.e("SmartLinkText", "Failed to open URI: ${annotation.item}", e)
+                    }
+                }
+        }
+    )
 }
 
 // Displays all the messages in a conversation
@@ -1053,8 +1144,9 @@ fun MessageItem(message: Message, isGroup: Boolean = false) {
                         }
                     }
                     if (message.body.isNotEmpty()) {
-                        Text(
+                        SmartLinkText(
                             text = message.body,
+                            isSent = isSent,
                             color = if (isSent) MaterialTheme.colorScheme.onPrimary 
                                     else MaterialTheme.colorScheme.onSecondaryContainer
                         )

@@ -32,6 +32,7 @@ class MainActivity : ComponentActivity() {
     private var currentContactName by mutableStateOf<String?>(null)
     private var isCreatingNewConversation by mutableStateOf(false)
     private var isSettingsOpen by mutableStateOf(false)
+    private var isAboutOpen by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,6 +62,12 @@ class MainActivity : ComponentActivity() {
                 ) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding)) {
                         when {
+                            isAboutOpen -> {
+                                AboutScreen(
+                                    onBack = { isAboutOpen = false },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                             isSettingsOpen -> {
                                 SettingsScreen(
                                     onBack = { isSettingsOpen = false },
@@ -99,6 +106,7 @@ class MainActivity : ComponentActivity() {
                                     onRequestDefault = { requestDefaultSmsRole() },
                                     onNewConversation = { isCreatingNewConversation = true },
                                     onSettingsClick = { isSettingsOpen = true },
+                                    onAboutClick = { isAboutOpen = true },
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }

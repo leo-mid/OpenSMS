@@ -78,6 +78,7 @@ fun ConversationList(
     onRequestDefault: () -> Unit,
     modifier: Modifier = Modifier,
     onNewConversation: () -> Unit = {},
+    onSettingsClick: () -> Unit = {},
     viewModel: ConversationViewModel = viewModel()
 ) {
     val conversations by viewModel.conversations.collectAsState()
@@ -109,7 +110,10 @@ fun ConversationList(
                     ) {
                         DropdownMenuItem(
                             text = { Text("Settings") },
-                            onClick = { menuExpanded = false }
+                            onClick = { 
+                                menuExpanded = false
+                                onSettingsClick()
+                            }
                         )
                         DropdownMenuItem(
                             text = { Text("About") },
@@ -1064,7 +1068,8 @@ fun ConversationListPreview() {
         ConversationList(
             isDefault = true,
             onConversationClick = { _: Long, _: String? -> },
-            onRequestDefault = {}
+            onRequestDefault = {},
+            onSettingsClick = {}
         )
     }
 }

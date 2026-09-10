@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
     private var currentThreadId by mutableStateOf<Long?>(null)
     private var currentContactName by mutableStateOf<String?>(null)
     private var isCreatingNewConversation by mutableStateOf(false)
+    private var isSettingsOpen by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,6 +61,12 @@ class MainActivity : ComponentActivity() {
                 ) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding)) {
                         when {
+                            isSettingsOpen -> {
+                                SettingsScreen(
+                                    onBack = { isSettingsOpen = false },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                             isCreatingNewConversation -> {
                                 NewConversationScreen(
                                     onBack = { isCreatingNewConversation = false },
@@ -91,6 +98,7 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onRequestDefault = { requestDefaultSmsRole() },
                                     onNewConversation = { isCreatingNewConversation = true },
+                                    onSettingsClick = { isSettingsOpen = true },
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }

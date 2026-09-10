@@ -39,6 +39,14 @@ class KeyRepository(context: Context) {
     }
 
     /**
+     * Wipes all saved public keys and encryption settings.
+     */
+    fun clearAllKeys() {
+        prefs.edit().clear().apply()
+        encryptionPrefs.edit().clear().apply()
+    }
+
+    /**
      * Sets whether encryption is enabled for a specific thread.
      */
     fun setEncryptionEnabled(threadId: Long, enabled: Boolean) {

@@ -1054,6 +1054,24 @@ fun MessageItem(message: Message, isGroup: Boolean = false) {
                     Text("Close")
                 }
             },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        val success = MmsUtils.saveMediaToGallery(
+                            context,
+                            message.mediaUri,
+                            message.mediaContentType
+                        )
+                        if (success) {
+                            Toast.makeText(context, "Saved to gallery!", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Failed to save.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                ) {
+                    Text("Save to Device")
+                }
+            },
             text = {
                 if (message.mediaContentType?.startsWith("video/") == true) {
                     VideoPlayer(

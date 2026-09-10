@@ -1,6 +1,7 @@
 package org.leotechs.opensms
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -27,6 +28,7 @@ fun AboutScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    BackHandler(onBack = onBack)
     val versionName = try {
         val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
         pInfo.versionName

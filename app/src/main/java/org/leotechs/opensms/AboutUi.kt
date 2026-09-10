@@ -31,7 +31,7 @@ fun AboutScreen(
         val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
         pInfo.versionName
     } catch (_: Exception) {
-        "1.4.0-beta"
+        "1.4.0"
     }
 
     Scaffold(

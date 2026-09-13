@@ -22,6 +22,7 @@ As of version 1.4.0 there is:
 * Blocking Numbers (1.4.0)
 * End-to-End Encryption (1.4.0) - Untested don't have two android devices. Please lmk if any issues.
 * Creating Contacts (1.4.0)
+* Message actions such as saving MMS to device (1.4.0)
 
 ## End-to-End Encryption (E2EE)
 OpenSMS supports  end-to-end encryption for SMS and MMS messages using a hybrid encryption scheme.
@@ -41,8 +42,10 @@ OpenSMS supports  end-to-end encryption for SMS and MMS messages using a hybrid 
 ## Upcoming Features
 These features are coming soon:
 * Deleting individual messages
-* Message actions such as saving MMS to device
 * Message Reactions
+* Multi Sim Support
+* Reply via Notification
+* Mark as Read via Notification
 
 ## Permissions
 The app needs the following permissions to function:

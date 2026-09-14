@@ -57,7 +57,7 @@ class SmsRepository(private val context: Context) {
                         val isRead = it.getInt(readIdx) == 1
                         
                         // Normalize date: seconds to milliseconds
-                        if (date in 1..<1000000000000L) date *= 1000
+                        if (date in 1L until 1000000000000L) date *= 1000
 
                         // Optimization: Determine if last message was MMS using pre-fetched data
                         lastMmsInfo[threadId]?.let { (mmsId, mmsDate) ->
@@ -96,7 +96,7 @@ class SmsRepository(private val context: Context) {
                         }
 
                         val contactName = if (isGroup) {
-                            contactInfos.map { it.first ?: it.second ?: "Unknown" }.joinToString(", ")
+                            contactInfos.joinToString(", ") { info -> info.first ?: info.second ?: "Unknown" }
                         } else {
                             contactInfos.firstOrNull()?.first
                         }
@@ -158,7 +158,7 @@ class SmsRepository(private val context: Context) {
     private fun getMmsAddress(mmsId: Long, type: Int? = null): String? {
         val uri = "content://mms/$mmsId/addr".toUri()
         val selection = if (type != null) "type = ?" else null
-        val selectionArgs = if (type != null) arrayOf(type.toString()) else null
+        val selectionArgs = type?.let { arrayOf(it.toString()) }
         
         val cursor = context.contentResolver.query(uri, null, selection, selectionArgs, null)
         cursor?.use {
@@ -302,7 +302,7 @@ class SmsRepository(private val context: Context) {
             val displayBody = when {
                 isEncrypted -> {
                     try {
-                        "[Decrypted] " + CryptoUtils.decrypt(msg.body.substring(5))
+                        CryptoUtils.decrypt(msg.body.substring(5))
                     } catch (_: Exception) { msg.body }
                 }
                 isKeyExchange -> "[Public Key Exchange]"

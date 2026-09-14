@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -20,13 +21,26 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import org.leotechs.opensms.ui.theme.OpenSMSTheme
 
 class MainActivity : ComponentActivity() {
-    private val REQUEST_DEFAULT_APP = 101
-    private val MY_PERMISSIONS_REQUEST_SMS = 102
+    private val requestRoleLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            isDefaultSmsApp = true
+            Toast.makeText(this, "OpenSMS is now your default SMS app!", Toast.LENGTH_SHORT).show()
+            checkSmsPermissions()
+        } else {
+            isDefaultSmsApp = false
+            Toast.makeText(this, "Permission denied. App may not function correctly.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private val requestPermissionsLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissionsMap ->
+        val granted = if (permissionsMap.values.all { it }) "permissions granted" else "some permissions not granted"
+        Toast.makeText(this, granted, Toast.LENGTH_SHORT).show()
+    }
+
     private var isDefaultSmsApp by mutableStateOf(false)
     private var currentThreadId by mutableStateOf<Long?>(null)
     private var currentContactName by mutableStateOf<String?>(null)
@@ -149,7 +163,7 @@ class MainActivity : ComponentActivity() {
         val roleManager = getSystemService(RoleManager::class.java)
         if (roleManager.isRoleAvailable(RoleManager.ROLE_SMS)) {
             val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_SMS)
-            startActivityForResult(intent, REQUEST_DEFAULT_APP)
+            requestRoleLauncher.launch(intent)
         }
     }
 
@@ -346,38 +360,7 @@ class MainActivity : ComponentActivity() {
         }
 
         if (toRequest.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, toRequest.toTypedArray(), MY_PERMISSIONS_REQUEST_SMS)
+            requestPermissionsLauncher.launch(toRequest.toTypedArray())
         }
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_DEFAULT_APP) {
-            if (resultCode == RESULT_OK) {
-                isDefaultSmsApp = true
-                Toast.makeText(this, "OpenSMS is now your default SMS app!", Toast.LENGTH_SHORT).show()
-                checkSmsPermissions()
-            } else {
-                isDefaultSmsApp = false
-                Toast.makeText(this, "Permission denied. App may not function correctly.", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        val granted = if(checkPermissionGranted(requestCode, grantResults)) "permissions granted" else "some permissions not granted"
-        Toast.makeText(this, granted, Toast.LENGTH_SHORT).show()
-    }
-
-    private fun checkPermissionGranted(requestCode: Int, grantResults: IntArray): Boolean{
-        when (requestCode) {
-            MY_PERMISSIONS_REQUEST_SMS -> {
-                return grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
-            }
-        }
-        return false
     }
 }

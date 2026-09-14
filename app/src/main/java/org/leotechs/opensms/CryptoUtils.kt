@@ -107,7 +107,7 @@ object CryptoUtils {
             
             for (pubKey in publicKeys) {
                 // Use a stable hash for the thumbprint
-                val thumbprint = Arrays.hashCode(pubKey.encoded).toLong()
+                val thumbprint = pubKey.encoded.contentHashCode().toLong()
                 rsaCipher.init(Cipher.ENCRYPT_MODE, pubKey)
                 val encryptedAesKey = rsaCipher.doFinal(aesKey.encoded)
                 
@@ -119,7 +119,7 @@ object CryptoUtils {
             buffer.put(encryptedData)
 
             Base64.encodeToString(buffer.array(), Base64.NO_WRAP)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             "Error encrypting for group"
         }
     }
@@ -133,7 +133,7 @@ object CryptoUtils {
             val buffer = ByteBuffer.wrap(combinedPayload)
             
             val numRecipients = buffer.getInt()
-            val myThumbprint = Arrays.hashCode(keyPair.public.encoded).toLong()
+            val myThumbprint = keyPair.public.encoded.contentHashCode().toLong()
             
             var aesKeyBytes: ByteArray? = null
             
@@ -163,8 +163,11 @@ object CryptoUtils {
             aesCipher.init(Cipher.DECRYPT_MODE, aesKey, GCMParameterSpec(GCM_TAG_LENGTH, iv))
             val decryptedBytes = aesCipher.doFinal(encryptedBytes)
 
+            // Clear sensitive key material
+            Arrays.fill(aesKeyBytes, 0.toByte())
+
             String(decryptedBytes)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             "Error decrypting message"
         }
     }

@@ -9,6 +9,8 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.ContactsContract
 import android.util.Log
+import android.util.Patterns
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -17,14 +19,30 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
@@ -36,9 +54,37 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayCircle
-import android.widget.Toast
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -49,14 +95,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -74,8 +120,9 @@ import kotlinx.coroutines.withContext
 import org.leotechs.opensms.ui.theme.OpenSMSTheme
 import java.io.File
 import java.text.SimpleDateFormat
-import java.util.*
-import android.util.Patterns
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -513,7 +560,7 @@ fun MessageDetail(
                     repository.clearContactCache()
                 }
 
-                val newMsgs = repository.getMessages(threadId, limit = 30, offset = page * 30)
+                val newMsgs = repository.getMessages(threadId, limit = 20, offset = page * 20)
                 
                 withContext(Dispatchers.Main) {
                     if (isRefresh) {
@@ -527,7 +574,7 @@ fun MessageDetail(
                         messages.sortByDescending { it.date }
                     }
                     
-                    if (newMsgs.size < 30) {
+                    if (newMsgs.size < 20) {
                         canLoadMore = false
                     }
                     
@@ -960,7 +1007,6 @@ fun SmartLinkText(
     modifier: Modifier = Modifier,
     color: Color = Color.Unspecified
 ) {
-    val uriHandler = LocalUriHandler.current
     val urlPattern = Patterns.WEB_URL
     
     val annotatedString = buildAnnotatedString {
@@ -1002,37 +1048,30 @@ fun SmartLinkText(
                 MaterialTheme.colorScheme.primary
             }
             
-            pushStringAnnotation(tag = "URL", annotation = destinationUrl)
-            withStyle(style = SpanStyle(
-                color = linkColor,
-                textDecoration = TextDecoration.Underline,
-                fontWeight = FontWeight.Bold
-            )) {
-                append(displayUrl)
-            }
-            pop()
+            val linkStyles = TextLinkStyles(
+                style = SpanStyle(
+                    color = linkColor,
+                    textDecoration = TextDecoration.Underline,
+                    fontWeight = FontWeight.Bold
+                )
+            )
+            
+            val startLinkIndex = this.length
+            append(displayUrl)
+            val endLinkIndex = this.length
+            addLink(LinkAnnotation.Url(url = destinationUrl, styles = linkStyles), startLinkIndex, endLinkIndex)
             lastIndex = end
         }
         append(text.substring(lastIndex))
     }
 
-    ClickableText(
+    Text(
         text = annotatedString,
         modifier = modifier,
         style = MaterialTheme.typography.bodyLarge.copy(
             color = color,
             textAlign = if (isSent) TextAlign.End else TextAlign.Start
-        ),
-        onClick = { offset ->
-            annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
-                .firstOrNull()?.let { annotation ->
-                    try {
-                        uriHandler.openUri(annotation.item)
-                    } catch (e: Exception) {
-                        Log.e("SmartLinkText", "Failed to open URI: ${annotation.item}", e)
-                    }
-                }
-        }
+        )
     )
 }
 

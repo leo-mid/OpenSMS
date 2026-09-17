@@ -213,7 +213,7 @@ fun ConversationList(
                                 false
                             }
                         },
-                        positionalThreshold = { totalDistance -> totalDistance * 0.8f }
+                        positionalThreshold = { totalDistance -> totalDistance * 0.3f }
                     )
 
                     SwipeToDismissBox(
